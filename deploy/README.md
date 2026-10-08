@@ -87,8 +87,9 @@ exit
 ssh ubuntu@fta.trading
 sudo mkdir -p /opt/journal && sudo chown $USER: /opt/journal && cd /opt/journal
 
-# Log in to GitHub's registry with the token from step 0.3 (paste it when asked, it won't show)
-read -s CR_PAT && echo "$CR_PAT" | docker login ghcr.io -u L1bre-dev --password-stdin && unset CR_PAT
+# Log in to GitHub's registry: at "Password:", paste the token from step 0.3 and press Enter.
+# Nothing shows while you paste, that's normal. Expected result: "Login Succeeded".
+docker login ghcr.io -u L1bre-dev
 
 # The deployment files are inside the image: extract them here
 docker pull ghcr.io/l1bre-dev/tradingapp:latest
