@@ -1,0 +1,111 @@
+@page "/Account/Invite"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using L1bre.Journal.Data
+@using L1bre.Journal.Services
+
+@inject InvitationService Invitations
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Create your account</PageTitle>
+
+<h1>Create your account</h1>
+
+@if (invitation is null)
+{
+    <div class="alert alert-warning col-lg-6" role="alert">
+        This invitation link is not valid any more: it was already used, revoked, or it expired (links work for 7 days).
+        Ask the admin for a new one. If you already created your account, <a href="Account/Login">log in</a>.
+    </div>
+}
+else
+{
+    <div class="row">
+        <div class="col-lg-5">
+            <p>You were invited as <strong>@string.Join(", ", invitation.RoleList)</strong>.</p>
+            <ul class="text-danger">
+                @foreach (var error in errors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+            <EditForm Model="Input" method="post" OnValidSubmit="CreateAccountAsync" FormName="invite">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="text-danger" role="alert" />
+                <input type="hidden" name="Input.Token" value="@Input.Token" />
+                <div class="form-floating mb-3">
+                    <input type="email" value="@invitation.Email" id="email" class="form-control" disabled />
+                    <label for="email" class="form-label">Email (your login)</label>
+                </div>
+                <div class="form-floating mb-3">
+                    <InputText @bind-Value="Input.DisplayName" id="Input.DisplayName" class="form-control" autocomplete="name" placeholder="Your name" />
+                    <label for="Input.DisplayName" class="form-label">Your name, as shown to your coach or trader</label>
+                    <ValidationMessage For="() => Input.DisplayName" class="text-danger" />
+                </div>
+                <div class="form-floating mb-3">
+                    <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="new-password" placeholder="password" />
+                    <label for="Input.Password" class="form-label">Password (10+ characters, upper, lower, digit, symbol)</label>
+                    <ValidationMessage For="() => Input.Password" class="text-danger" />
+                </div>
+                <div class="form-floating mb-3">
+                    <InputText type="password" @bind-Value="Input.ConfirmPassword" id="Input.ConfirmPassword" class="form-control" autocomplete="new-password" placeholder="password" />
+                    <label for="Input.ConfirmPassword" class="form-label">Confirm password</label>
+                    <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
+                </div>
+                <button type="submit" class="w-100 btn btn-lg btn-primary">Create my account</button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    private Invitation? invitation;
+    private IEnumerable<string> errors = [];
+
+    [SupplyParameterFromQuery(Name = "token")]
+    private string? Token { get; set; }
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+        // On GET the token comes from the link; on POST from the hidden field.
+        Input.Token ??= Token;
+        invitation = await Invitations.FindPendingAsync(Input.Token);
+    }
+
+    private async Task CreateAccountAsync()
+    {
+        var (user, problems) = await Invitations.AcceptAsync(Input.Token!, Input.DisplayName, Input.Password);
+        if (user is null)
+        {
+            errors = problems;
+            return;
+        }
+
+        await SignInManager.SignInAsync(user, isPersistent: false);
+        RedirectManager.RedirectTo("");
+    }
+
+    private sealed class InputModel
+    {
+        public string? Token { get; set; }
+
+        [Required]
+        [StringLength(100)]
+        public string DisplayName { get; set; } = "";
+
+        [Required]
+        [StringLength(100, MinimumLength = 10, ErrorMessage = "The password must be at least 10 characters long.")]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        [DataType(DataType.Password)]
+        [Compare(nameof(Password), ErrorMessage = "The two passwords don't match.")]
+        public string ConfirmPassword { get; set; } = "";
+    }
+}

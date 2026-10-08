@@ -1,0 +1,35 @@
+@page "/"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Identity
+@using L1bre.Journal.Data
+
+@inject UserManager<ApplicationUser> UserManager
+
+<PageTitle>L1bre Journal</PageTitle>
+
+<h1>Hello @displayName</h1>
+
+<p>Your roles: <strong>@string.Join(", ", roles)</strong>.</p>
+
+<p class="text-secondary">
+    This is the first version of the journal: accounts and invitations only.
+    Next come linking your cTrader accounts, importing your trades with their 54 candles,
+    the analysis, and the dashboards.
+</p>
+
+@code {
+    private string displayName = "";
+    private IList<string> roles = [];
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null) return;
+        displayName = string.IsNullOrWhiteSpace(user.DisplayName) ? user.Email ?? "" : user.DisplayName;
+        roles = await UserManager.GetRolesAsync(user);
+    }
+}

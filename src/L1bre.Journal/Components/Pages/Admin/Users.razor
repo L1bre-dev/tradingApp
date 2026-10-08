@@ -1,0 +1,166 @@
+@page "/admin"
+@attribute [Authorize(Policy = Roles.Admin)]
+
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.EntityFrameworkCore
+@using L1bre.Journal.Data
+@using L1bre.Journal.Domain.Accounts
+@using L1bre.Journal.Services
+
+@inject InvitationService Invitations
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager Navigation
+@inject TimeProvider Clock
+
+<PageTitle>Admin</PageTitle>
+
+<h1>Admin</h1>
+
+<section class="mb-5">
+    <h2 class="h4">Invite someone</h2>
+    <p class="text-secondary">The app doesn't send emails yet: copy the link and send it yourself. It works once, for 7 days.</p>
+    <EditForm Model="Invite" method="post" OnValidSubmit="CreateInvitationAsync" FormName="invite" class="row g-2 align-items-center">
+        <DataAnnotationsValidator />
+        <div class="col-md-4">
+            <InputText @bind-Value="Invite.Email" class="form-control" placeholder="email@example.com" aria-label="Email" />
+            <ValidationMessage For="() => Invite.Email" class="text-danger" />
+        </div>
+        <div class="col-auto"><label class="form-check-label"><InputCheckbox @bind-Value="Invite.Trader" class="form-check-input" /> Trader</label></div>
+        <div class="col-auto"><label class="form-check-label"><InputCheckbox @bind-Value="Invite.Coach" class="form-check-input" /> Coach</label></div>
+        <div class="col-auto"><label class="form-check-label"><InputCheckbox @bind-Value="Invite.Admin" class="form-check-input" /> Admin</label></div>
+        <div class="col-auto"><button type="submit" class="btn btn-primary">Create invitation link</button></div>
+    </EditForm>
+    @if (link is not null)
+    {
+        <div class="alert alert-success mt-3" role="status">
+            <div class="mb-1">@linkLabel</div>
+            <input class="form-control font-monospace" readonly value="@link" onclick="this.select()" aria-label="Link to copy" />
+        </div>
+    }
+</section>
+
+@* One form for all row buttons: the clicked button sends its own value, e.g. "revoke:<id>". *@
+<form method="post" @formname="row-action" @onsubmit="HandleRowActionAsync">
+    <AntiforgeryToken />
+
+    <section class="mb-5">
+        <h2 class="h4">People</h2>
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>Since</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var (user, roles) in users)
+                {
+                    <tr>
+                        <td>@user.DisplayName</td>
+                        <td>@user.Email</td>
+                        <td>@string.Join(", ", roles)</td>
+                        <td>@user.CreatedAt.ToString("yyyy-MM-dd")</td>
+                        <td class="text-end"><button type="submit" name="RowAction" value="reset:@user.Id" class="btn btn-sm btn-outline-secondary">Password reset link</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h2 class="h4">Invitations</h2>
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Email</th><th>Roles</th><th>Created</th><th>State</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var invitation in invitations)
+                {
+                    var state = invitation.StateAt(Clock.GetUtcNow());
+                    <tr>
+                        <td>@invitation.Email</td>
+                        <td>@invitation.Roles.Replace(",", ", ")</td>
+                        <td>@invitation.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>@state</td>
+                        <td class="text-end">
+                            @if (state == InvitationState.Pending)
+                            {
+                                <button type="submit" name="RowAction" value="revoke:@invitation.Id" class="btn btn-sm btn-outline-danger">Revoke</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+</form>
+
+@code {
+    private List<(ApplicationUser User, IList<string> Roles)> users = [];
+    private List<Invitation> invitations = [];
+    private string? link;
+    private string? linkLabel;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "invite")]
+    private InviteModel Invite { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "row-action")]
+    private string? RowAction { get; set; }
+
+    protected override void OnInitialized() => Invite ??= new();
+
+    // Runs after any form handler, so the tables show the result of the action.
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        users = [];
+        foreach (var user in await UserManager.Users.OrderBy(u => u.CreatedAt).ToListAsync())
+            users.Add((user, await UserManager.GetRolesAsync(user)));
+        invitations = await Invitations.ListAsync();
+    }
+
+    private async Task CreateInvitationAsync()
+    {
+        var roles = new List<string>();
+        if (Invite.Trader) roles.Add(Roles.Trader);
+        if (Invite.Coach) roles.Add(Roles.Coach);
+        if (Invite.Admin) roles.Add(Roles.Admin);
+
+        var me = UserManager.GetUserId(HttpContext.User);
+        var created = await Invitations.CreateAsync(Invite.Email, roles, me);
+        link = Navigation.ToAbsoluteUri($"Account/Invite?token={created.Token}").ToString();
+        linkLabel = $"Invitation link for {created.Invitation.Email} ({created.Invitation.Roles.Replace(",", ", ")}):";
+        Invite = new();
+        await LoadAsync();
+    }
+
+    private async Task HandleRowActionAsync()
+    {
+        var parts = (RowAction ?? "").Split(':', 2);
+        if (parts.Length != 2) return;
+
+        if (parts[0] == "revoke" && Guid.TryParse(parts[1], out var invitationId))
+        {
+            await Invitations.RevokeAsync(invitationId);
+        }
+        else if (parts[0] == "reset" && await UserManager.FindByIdAsync(parts[1]) is { } user)
+        {
+            var token = await UserManager.GeneratePasswordResetTokenAsync(user);
+            var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+            link = Navigation.ToAbsoluteUri($"Account/ResetPassword?code={code}").ToString();
+            linkLabel = $"Password reset link for {user.Email} (they type their email and a new password):";
+        }
+        await LoadAsync();
+    }
+
+    private sealed class InviteModel
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = "";
+
+        public bool Trader { get; set; } = true;
+        public bool Coach { get; set; }
+        public bool Admin { get; set; }
+    }
+}

@@ -1,0 +1,54 @@
+# L1bre Journal on the VPS: three containers.
+#   caddy    - the only one reachable from the internet (80/443); gets the HTTPS certificate itself
+#   app      - the web app, reachable only from caddy
+#   postgres - the database, reachable only from app
+# Settings come from the .env file next to this one.
+name: journal
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+  app:
+    image: ghcr.io/l1bre-dev/tradingapp:${APP_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      ConnectionStrings__Default: "Host=postgres;Database=journal;Username=journal;Password=${POSTGRES_PASSWORD}"
+      App__PublicUrl: "https://${DOMAIN}"
+      App__AdminEmail: ${ADMIN_EMAIL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: journal
+      POSTGRES_USER: journal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U journal -d journal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:
