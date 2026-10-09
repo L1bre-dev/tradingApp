@@ -1,0 +1,199 @@
+@page "/accounts"
+@attribute [Authorize(Policy = Roles.Trader)]
+
+@using Microsoft.AspNetCore.Identity
+@using L1bre.Journal.Data
+@using L1bre.Journal.Services
+
+@inject CTraderLinkService Links
+@inject UserManager<ApplicationUser> UserManager
+
+<PageTitle>cTrader accounts</PageTitle>
+
+<h1>cTrader accounts</h1>
+
+<p class="text-secondary">
+    Link your cTrader ID to let the journal read your trades. Access is <strong>read-only</strong>:
+    the journal can never place, change or close a trade. One cTrader ID can open several trading accounts;
+    tick the ones to import.
+</p>
+
+@if (message is not null)
+{
+    <div class="alert @messageClass" role="status">@message</div>
+}
+
+@if (!Links.IsConfigured)
+{
+    <div class="alert alert-warning" role="status">
+        Linking isn't set up on this server yet: the cTrader application's client ID and secret are missing
+        (<code>CTRADER_CLIENT_ID</code> and <code>CTRADER_CLIENT_SECRET</code> in the server's <code>.env</code>).
+    </div>
+}
+else
+{
+    @* A plain link, not enhanced navigation: the browser must really leave for the cTrader login page. *@
+    <p><a href="ctrader/link" class="btn btn-primary" data-enhance-nav="false">Link a cTrader ID</a></p>
+}
+
+@* One form for all row buttons: the clicked button sends its own value, e.g. "select:<account id>". *@
+<form method="post" action="accounts" @formname="row-action" @onsubmit="HandleRowActionAsync">
+    <AntiforgeryToken />
+
+    @foreach (var link in links)
+    {
+        <section class="card mb-4">
+            <div class="card-header d-flex flex-wrap gap-2 align-items-center">
+                <strong class="me-auto">cTrader ID @link.CtidUserId</strong>
+                @if (link.Status == LinkStatus.NeedsRelink)
+                {
+                    <span class="badge text-bg-danger">Link again</span>
+                }
+                else
+                {
+                    <span class="badge text-bg-success">Linked</span>
+                }
+                <button type="submit" name="RowAction" value="refresh:@link.Id" class="btn btn-sm btn-outline-secondary">Refresh accounts</button>
+                <button type="submit" name="RowAction" value="unlink:@link.Id" class="btn btn-sm btn-outline-danger"
+                        onclick="return confirm('Unlink this cTrader ID? Its tokens and account list are deleted from the journal.')">Unlink</button>
+            </div>
+            <div class="card-body">
+                <p class="small text-secondary mb-2">
+                    Linked @Utc(link.LinkedAt) ·
+                    @if (link.Status == LinkStatus.Active)
+                    {
+                        <text>token valid until @Utc(link.AccessTokenExpiresAt) (renewed automatically) ·</text>
+                    }
+                    accounts checked @Utc(link.AccountsCheckedAt)
+                </p>
+                @if (link.Status == LinkStatus.NeedsRelink)
+                {
+                    <div class="alert alert-danger small" role="status">
+                        cTrader no longer accepts this link (access revoked or token invalid).
+                        Use <strong>Link a cTrader ID</strong> again with the same cTrader ID: the accounts and their choices are kept.
+                    </div>
+                }
+                @if (link.LastError is not null)
+                {
+                    <p class="small text-danger mb-2">Last problem (@Utc(link.LastErrorAt)): @link.LastError</p>
+                }
+
+                @if (link.Accounts.Count == 0)
+                {
+                    <p class="mb-0">This cTrader ID has no trading account.</p>
+                }
+                else
+                {
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Account</th><th>Broker</th><th>Type</th><th>Import</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var account in link.Accounts.OrderBy(a => a.IsLive).ThenBy(a => a.TraderLogin))
+                            {
+                                <tr class="@(account.IsAvailable ? "" : "text-secondary")">
+                                    <td>@(account.TraderLogin?.ToString() ?? $"#{account.CtidTraderAccountId}")</td>
+                                    <td>@(account.BrokerName ?? "?")</td>
+                                    <td>
+                                        @if (account.IsLive) { <span class="badge text-bg-warning">Live</span> }
+                                        else { <span class="badge text-bg-info">Demo</span> }
+                                        @if (!account.IsAvailable) { <span class="ms-1">no longer available</span> }
+                                    </td>
+                                    <td>@(account.IsSelected ? "Yes" : "No")</td>
+                                    <td class="text-end">
+                                        @if (account.IsSelected)
+                                        {
+                                            <button type="submit" name="RowAction" value="unselect:@account.Id" class="btn btn-sm btn-outline-secondary">Stop importing</button>
+                                        }
+                                        else if (account.IsAvailable)
+                                        {
+                                            <button type="submit" name="RowAction" value="select:@account.Id" class="btn btn-sm btn-outline-primary">Import</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </section>
+    }
+</form>
+
+@if (links.Count > 0)
+{
+    <p class="small text-secondary">
+        Importing trades comes with the next version of the journal; your choices are already saved.
+        You can also withdraw the journal's access from your cTrader ID settings, on cTrader's side.
+    </p>
+}
+
+@code {
+    private List<CTraderLink> links = [];
+    private string? message;
+    private string messageClass = "alert-info";
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "link")]
+    private string? LinkResult { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? LinkError { get; set; }
+
+    [SupplyParameterFromForm(FormName = "row-action")]
+    private string? RowAction { get; set; }
+
+    private string UserId => UserManager.GetUserId(HttpContext.User)!;
+
+    protected override void OnInitialized() => ShowLinkResult();
+
+    // Runs after the form handler, so the page shows the result of the action.
+    protected override async Task OnParametersSetAsync() => links = await Links.ListAsync(UserId);
+
+    private void ShowLinkResult()
+    {
+        (message, messageClass) = LinkResult switch
+        {
+            "linked" => ("Your cTrader ID is linked. Tick the accounts to import below.", "alert-success"),
+            "cancelled" => ("Linking was cancelled on the cTrader page. Nothing was changed.", "alert-info"),
+            "expired" => ("That linking attempt was too old or didn't start from this page. Please click Link a cTrader ID again.", "alert-warning"),
+            "failed" => ($"cTrader refused the link: {Describe(LinkError)}", "alert-danger"),
+            _ => (null, "alert-info"),
+        };
+    }
+
+    private static string Describe(string? code) => code switch
+    {
+        "UNREACHABLE" => "the cTrader servers could not be reached. Try again in a few minutes.",
+        "CH_CLIENT_AUTH_FAILURE" => "the server's cTrader client ID or secret is wrong (code CH_CLIENT_AUTH_FAILURE).",
+        null or "" => "unknown error.",
+        _ => $"error code {code}. Try again; if it repeats, give this code to the admin.",
+    };
+
+    private async Task HandleRowActionAsync()
+    {
+        var parts = (RowAction ?? "").Split(':', 2);
+        if (parts.Length != 2 || !Guid.TryParse(parts[1], out var id)) return;
+
+        message = null;
+        switch (parts[0])
+        {
+            case "select":
+                await Links.SetSelectedAsync(UserId, id, true);
+                break;
+            case "unselect":
+                await Links.SetSelectedAsync(UserId, id, false);
+                break;
+            case "refresh":
+                await Links.RefreshAccountsAsync(UserId, id, HttpContext.RequestAborted);
+                break;
+            case "unlink":
+                await Links.UnlinkAsync(UserId, id);
+                (message, messageClass) = ("The cTrader ID was unlinked.", "alert-info");
+                break;
+        }
+        links = await Links.ListAsync(UserId);
+    }
+
+    private static string Utc(DateTimeOffset? time) => time is null ? "never" : time.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm") + " UTC";
+}

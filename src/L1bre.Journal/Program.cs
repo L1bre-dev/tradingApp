@@ -1,5 +1,6 @@
 using L1bre.Journal.Components;
 using L1bre.Journal.Components.Account;
+using L1bre.Journal.CTrader;
 using L1bre.Journal.Data;
 using L1bre.Journal.Domain.Accounts;
 using L1bre.Journal.Services;
@@ -26,7 +27,8 @@ builder.Services.AddAuthentication(options =>
     .AddIdentityCookies();
 
 builder.Services.AddAuthorizationBuilder()
-    .AddPolicy(Roles.Admin, policy => policy.RequireRole(Roles.Admin));
+    .AddPolicy(Roles.Admin, policy => policy.RequireRole(Roles.Admin))
+    .AddPolicy(Roles.Trader, policy => policy.RequireRole(Roles.Trader));
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("Connection string 'Default' not found.");
@@ -56,6 +58,14 @@ builder.Services.AddDataProtection()
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<InvitationService>();
+
+// cTrader Open API: client ID and secret come from the environment (CTrader__ClientId, CTrader__ClientSecret),
+// never from a file in Git. Without them the app runs, and the accounts page says linking isn't set up.
+builder.Services.Configure<CTraderOptions>(builder.Configuration.GetSection(CTraderOptions.Section));
+builder.Services.AddHttpClient<CTraderApi>();
+builder.Services.AddScoped<CTraderTokenProtector>();
+builder.Services.AddScoped<CTraderLinkService>();
+builder.Services.AddHostedService<TokenRenewalWorker>();
 
 builder.Services.AddHealthChecks().AddDbContextCheck<ApplicationDbContext>();
 
@@ -91,6 +101,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapAdditionalIdentityEndpoints();
+app.MapCTraderEndpoints();
 app.MapHealthChecks("/healthz");
 
 await StartupTasks.RunAsync(app.Services, app.Configuration);

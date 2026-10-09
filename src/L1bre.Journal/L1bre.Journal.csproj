@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\L1bre.Journal.Domain\L1bre.Journal.Domain.csproj" />
+    <ProjectReference Include="..\L1bre.Journal.CTrader\L1bre.Journal.CTrader.csproj" />
   </ItemGroup>
 
 </Project>

@@ -8,6 +8,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     : IdentityDbContext<ApplicationUser>(options), IDataProtectionKeyContext
 {
     public DbSet<Invitation> Invitations => Set<Invitation>();
+    public DbSet<CTraderLink> CTraderLinks => Set<CTraderLink>();
+    public DbSet<TradingAccount> TradingAccounts => Set<TradingAccount>();
 
     /// <summary>
     /// Keys that sign the login cookies (and, from milestone 2, encrypt cTrader tokens).
@@ -31,6 +33,21 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             invitation.Property(i => i.Roles).HasMaxLength(100);
             invitation.HasIndex(i => i.TokenHash).IsUnique();
             invitation.Ignore(i => i.RoleList);
+        });
+
+        builder.Entity<CTraderLink>(link =>
+        {
+            link.HasOne(l => l.User).WithMany().HasForeignKey(l => l.UserId).OnDelete(DeleteBehavior.Cascade);
+            link.HasIndex(l => new { l.UserId, l.CtidUserId }).IsUnique();
+            link.Property(l => l.Status).HasConversion<string>().HasMaxLength(20);
+            link.Property(l => l.LastError).HasMaxLength(500);
+        });
+
+        builder.Entity<TradingAccount>(account =>
+        {
+            account.HasOne(a => a.CTraderLink).WithMany(l => l.Accounts).HasForeignKey(a => a.CTraderLinkId).OnDelete(DeleteBehavior.Cascade);
+            account.HasIndex(a => new { a.CTraderLinkId, a.CtidTraderAccountId }).IsUnique();
+            account.Property(a => a.BrokerName).HasMaxLength(100);
         });
     }
 }

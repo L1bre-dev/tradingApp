@@ -5,6 +5,7 @@ WORKDIR /src
 # Restore first, from the project files only: Docker caches this layer until a dependency changes.
 COPY src/L1bre.Journal/L1bre.Journal.csproj src/L1bre.Journal/
 COPY src/L1bre.Journal.Domain/L1bre.Journal.Domain.csproj src/L1bre.Journal.Domain/
+COPY src/L1bre.Journal.CTrader/L1bre.Journal.CTrader.csproj src/L1bre.Journal.CTrader/
 RUN dotnet restore src/L1bre.Journal/L1bre.Journal.csproj
 
 COPY src/ src/

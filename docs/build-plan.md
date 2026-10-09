@@ -52,7 +52,7 @@ Phase 2 ideas (trend replay with L1bre.Core, Discord/email notification, CSV exp
 ## 3. How I test
 
 - **Domain rules** (`L1bre.Journal.Domain.Tests`): unit tests on hand-made fills, candles and ticks. Examples: a partial close gives one trade, not two; a Buy fill at Ask sits one spread above the cut candle close; a 0 % trend makes the total 0 %; a coach cannot read the self analysis before submitting.
-- **cTrader client**: tested against recorded API answers (fixtures), because **this cloud environment cannot reach the cTrader servers** (checked today: `openapi.ctrader.com` is refused by its network policy, and the Open API runs on ports 5035/5036 anyway). So the **first real test with your account happens on the VPS** at milestones 2 and 3. I will add a "diagnostics" page (admin only) showing the last API calls and errors, so we can debug from the browser without SSH.
+- **cTrader client**: tested against a small fake cTrader server (`tests/FakeCTrader`) that answers the OAuth and Open API messages as documented, because **this cloud environment cannot reach the cTrader servers** (`openapi.ctrader.com` is refused by its network policy). So the **first real test with your account happens on the VPS**. Each link shows its last cTrader error on the accounts page; an admin diagnostics page comes with the sync (milestone 3), where most calls happen.
 - **Web app**: started locally in this environment with a test database and checked in a headless browser before each PR.
 
 ---
@@ -73,7 +73,7 @@ Phase 2 ideas (trend replay with L1bre.Core, Discord/email notification, CSV exp
 - Whether cTrader candles from the Open API are Bid-based (expected, as in the cBots) — checked at milestone 3 by comparing with your cTrader chart.
 - How far back the deal history goes — seen at the first import.
 - Whether one Open API application accepts several redirect URLs (for the later move to the L1bre domain).
-- `cTrader.OpenAPI.Net` targets .NET 6; if it doesn't run cleanly on .NET 10, I write a small client directly on the published protobuf files instead.
+- Milestone 2 decision: no `cTrader.OpenAPI.Net` (it targets .NET 6). The app has its own small client using the Open API's **JSON over WebSocket** (port 5036), which needs no protobuf code.
 
 ---
 
