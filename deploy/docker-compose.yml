@@ -29,6 +29,8 @@ services:
       ConnectionStrings__Default: "Host=postgres;Database=journal;Username=journal;Password=${POSTGRES_PASSWORD}"
       App__PublicUrl: "https://${DOMAIN}"
       App__AdminEmail: ${ADMIN_EMAIL}
+      CTrader__ClientId: ${CTRADER_CLIENT_ID:-}
+      CTrader__ClientSecret: ${CTRADER_CLIENT_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy

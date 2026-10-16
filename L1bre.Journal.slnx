@@ -1,9 +1,12 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/L1bre.Journal.CTrader/L1bre.Journal.CTrader.csproj" />
     <Project Path="src/L1bre.Journal.Domain/L1bre.Journal.Domain.csproj" />
     <Project Path="src/L1bre.Journal/L1bre.Journal.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/FakeCTrader/FakeCTrader.csproj" />
+    <Project Path="tests/L1bre.Journal.CTrader.Tests/L1bre.Journal.CTrader.Tests.csproj" />
     <Project Path="tests/L1bre.Journal.Domain.Tests/L1bre.Journal.Domain.Tests.csproj" />
   </Folder>
 </Solution>

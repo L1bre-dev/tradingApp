@@ -148,6 +148,31 @@ scp 'ubuntu@fta.trading:/opt/journal/backups/*.sql.gz' .
 
 (An automatic copy to OVH Object Storage can come later.)
 
+## 7. Linking cTrader (once Spotware has approved the Open API application)
+
+The journal reads trades through **one** cTrader Open API application, registered on your cTrader ID at
+https://openapi.ctrader.com/apps. Every user links through it.
+
+1. On https://openapi.ctrader.com/apps, open the application (it must show as approved/active) and add the
+   **redirect URI** `https://fta.trading/ctrader/callback`, exactly like this (https, no slash at the end).
+2. Copy its **Client ID** and **Secret** into `.env` on the VPS (`nano /opt/journal/.env`):
+
+   ```
+   CTRADER_CLIENT_ID=the client id
+   CTRADER_CLIENT_SECRET=the secret
+   ```
+
+   The secret goes **only** in this file: never in a chat, an email or GitHub.
+3. Apply it: `docker compose up -d` (it recreates the app container with the new settings).
+4. In the journal: **cTrader accounts** → **Link a cTrader ID** → log in on cTrader's page and allow access →
+   back in the journal, click **Import** on the accounts to import.
+
+Without the two values, the app works normally and the cTrader accounts page says linking isn't set up.
+
+**About the backups**: cTrader access tokens are stored encrypted, but the encryption keys are in the same
+database, so a backup file is enough to read the trading history of the linked accounts (never to trade:
+access is read-only). Keep the backups private.
+
 ---
 
 ## Everyday commands (in `/opt/journal`)
@@ -155,6 +180,7 @@ scp 'ubuntu@fta.trading:/opt/journal/backups/*.sql.gz' .
 | What | Command |
 |---|---|
 | Update to the latest version (after a PR is merged and CI is green) | `docker compose pull && docker compose up -d` |
+| Update when the PR says the deployment files changed | see below |
 | Is everything running? | `docker compose ps` |
 | App logs (last 200 lines) | `docker compose logs app --tail 200` |
 | Restart the app | `docker compose restart app` |
@@ -162,6 +188,21 @@ scp 'ubuntu@fta.trading:/opt/journal/backups/*.sql.gz' .
 | Stop everything (data is kept) | `docker compose down` |
 
 Never run `docker compose down -v`: `-v` deletes the database volume.
+
+### When the deployment files change
+
+Some versions also change `docker-compose.yml` or `.env.example` (the PR says so). Get the new files from the
+new image, then compare `.env` with `.env.example` and add any new line:
+
+```bash
+cd /opt/journal
+docker compose pull
+docker run --rm --entrypoint tar ghcr.io/l1bre-dev/tradingapp:latest -C /deploy -c . | tar -x
+diff .env.example .env    # lines starting with "<" are settings your .env doesn't have yet
+docker compose up -d
+```
+
+Extracting never touches `.env` or the backups: the image doesn't contain them.
 
 ## Restoring a backup
 
