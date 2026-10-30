@@ -22,4 +22,20 @@ public class TradingAccount
     public bool IsAvailable { get; set; } = true;
 
     public DateTimeOffset AddedAt { get; set; }
+
+    // Sync (milestone 3)
+    public string? DepositCurrency { get; set; }
+    public int? MoneyDigits { get; set; }
+
+    /// <summary>Where the first import starts: the account's registration date.</summary>
+    public DateTimeOffset? HistoryStart { get; set; }
+
+    /// <summary>Executions are imported up to this time; the next sync continues from here.</summary>
+    public DateTimeOffset? SyncedUntil { get; set; }
+    public DateTimeOffset? LastSyncAt { get; set; }
+    public DateTimeOffset? SyncRequestedAt { get; set; }
+    public string? LastSyncError { get; set; }
+    public DateTimeOffset? LastSyncErrorAt { get; set; }
+
+    public List<Trade> Trades { get; set; } = [];
 }

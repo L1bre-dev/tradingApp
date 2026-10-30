@@ -7,6 +7,9 @@ public enum LinkStatus
 
     /// <summary>cTrader refused the tokens (revoked or invalid): the trader must link again.</summary>
     NeedsRelink,
+
+    /// <summary>The trader unlinked it: tokens erased, imported trades kept. Linking again reactivates it.</summary>
+    Unlinked,
 }
 
 /// <summary>

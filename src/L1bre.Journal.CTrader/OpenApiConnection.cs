@@ -16,8 +16,13 @@ public sealed class OpenApiConnection : IAsyncDisposable
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);
 
+    /// <summary>cTrader allows 5 historical requests per second; one every 250 ms keeps a margin.</summary>
+    private static readonly TimeSpan HistoricalSpacing = TimeSpan.FromMilliseconds(250);
+
     private readonly ClientWebSocket socket = new();
     private readonly SemaphoreSlim sendLock = new(1, 1);
+    private readonly SemaphoreSlim historicalLock = new(1, 1);
+    private DateTimeOffset lastHistorical = DateTimeOffset.MinValue;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<OpenApiMessage>> pending = new();
     private readonly CancellationTokenSource stop = new();
     private readonly ILogger logger;
@@ -44,6 +49,7 @@ public sealed class OpenApiConnection : IAsyncDisposable
         pending[id] = answer;
         try
         {
+            if (PayloadTypes.IsHistorical(payloadType)) await WaitHistoricalTurnAsync(ct);
             await SendAsync(new OpenApiMessage(payloadType, payload, id), ct);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, stop.Token);
             timeout.CancelAfter(RequestTimeout);
@@ -58,6 +64,21 @@ public sealed class OpenApiConnection : IAsyncDisposable
         finally
         {
             pending.TryRemove(id, out _);
+        }
+    }
+
+    private async Task WaitHistoricalTurnAsync(CancellationToken ct)
+    {
+        await historicalLock.WaitAsync(ct);
+        try
+        {
+            var wait = lastHistorical + HistoricalSpacing - DateTimeOffset.UtcNow;
+            if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
+            lastHistorical = DateTimeOffset.UtcNow;
+        }
+        finally
+        {
+            historicalLock.Release();
         }
     }
 
@@ -163,5 +184,6 @@ public sealed class OpenApiConnection : IAsyncDisposable
         socket.Dispose();
         stop.Dispose();
         sendLock.Dispose();
+        historicalLock.Dispose();
     }
 }

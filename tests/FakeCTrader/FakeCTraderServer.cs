@@ -12,7 +12,9 @@ namespace FakeCTrader;
 /// It mimics what the documentation describes:
 ///   GET  /authorize   the cTrader ID login page: approves at once and redirects back with ?code=
 ///   GET  /apps/token  exchanges the code for tokens
-///   WS   /            the JSON Open API: application auth, profile, account list, token refresh
+///   GET  /test/close-open-position  closes the open seeded position (manual testing of a later sync)
+///   WS   /            the JSON Open API: application auth, profile, account list, token refresh,
+///                     and the account history of <see cref="FakeMarket"/> (deals, orders, symbols, candles, ticks)
 /// </summary>
 public sealed class FakeCTraderServer : IAsyncDisposable
 {
@@ -38,6 +40,9 @@ public sealed class FakeCTraderServer : IAsyncDisposable
     /// <summary>When false, the authorize page doesn't send state back (cTrader doesn't document it).</summary>
     public bool EchoState { get; set; } = true;
 
+    /// <summary>The history every fake account answers with. Tests can add deals to it.</summary>
+    public FakeMarket Market { get; } = new(DateTimeOffset.UtcNow);
+
     public string BaseUrl { get; }
     public string WebSocketUrl => BaseUrl.Replace("http://", "ws://");
     public List<int> ReceivedPayloadTypes { get; } = [];
@@ -58,6 +63,12 @@ public sealed class FakeCTraderServer : IAsyncDisposable
         app.UseWebSockets();
         app.MapGet("/authorize", (HttpContext ctx) => server!.Authorize(ctx));
         app.MapGet("/apps/token", (HttpContext ctx) => server!.Token(ctx));
+        // Manual testing only: closes the open seeded position (5) one minute ago, as if it hit its TP between two syncs.
+        app.MapGet("/test/close-open-position", () =>
+        {
+            server!.Market.AddDeal(542, positionId: 5, "SELL", 100, DateTimeOffset.UtcNow.AddMinutes(-1), 4004.00, commission: -35, gross: 360, closeCommission: -70);
+            return "closed";
+        });
         app.Map("/", async ctx =>
         {
             if (!ctx.WebSockets.IsWebSocketRequest) { ctx.Response.StatusCode = 400; return; }
@@ -103,6 +114,7 @@ public sealed class FakeCTraderServer : IAsyncDisposable
     {
         var buffer = new byte[64 * 1024];
         var appAuthorized = false;
+        var authorizedAccounts = new HashSet<long>();
         while (socket.State == WebSocketState.Open)
         {
             WebSocketReceiveResult result;
@@ -120,8 +132,27 @@ public sealed class FakeCTraderServer : IAsyncDisposable
             var payload = request["payload"]?.AsObject() ?? [];
             lock (ReceivedPayloadTypes) ReceivedPayloadTypes.Add(type);
 
-            JsonObject? answer = type switch
+            JsonObject? answer;
+            try
             {
+                answer = Answer(type, payload, ref appAuthorized, authorizedAccounts);
+            }
+            catch (Exception ex)
+            {
+                // A bug in the fake must show in the test output, not as a silent disconnect.
+                answer = Error("FAKE_SERVER_BUG", ex.ToString());
+            }
+            if (answer is null) continue;
+
+            if (id is not null) answer["clientMsgId"] = id;
+            await socket.SendAsync(Encoding.UTF8.GetBytes(answer.ToJsonString()), WebSocketMessageType.Text, true, CancellationToken.None);
+        }
+    }
+
+    private JsonObject? Answer(int type, JsonObject payload, ref bool appAuthorized, HashSet<long> authorizedAccounts)
+    {
+        return type switch
+        {
                 51 => null,
                 2100 when payload["clientId"]?.GetValue<string>() == ClientId && payload["clientSecret"]?.GetValue<string>() == ClientSecret
                     => Reply(2101, [], ref appAuthorized),
@@ -138,14 +169,24 @@ public sealed class FakeCTraderServer : IAsyncDisposable
                     }),
                 2173 when payload["refreshToken"]?.GetValue<string>() == RefreshToken => Refresh(),
                 2151 or 2149 or 2173 => Error("CH_ACCESS_TOKEN_INVALID", "Invalid access token"),
+                2102 => AccountAuth(payload, authorizedAccounts),
+                _ when payload["ctidTraderAccountId"] is { } account && !authorizedAccounts.Contains(account.GetValue<long>())
+                    => Error("CH_CTID_TRADER_ACCOUNT_NOT_AUTHORIZED", "Trading account is not authorized"),
+                _ when Market.Answer(type, payload, payload["ctidTraderAccountId"]?.GetValue<long>() ?? 0) is { } marketAnswer => marketAnswer,
                 _ => Error("UNSUPPORTED_MESSAGE", $"Fake server doesn't know {type}"),
             };
-            if (answer is null) continue;
-
-            if (id is not null) answer["clientMsgId"] = id;
-            await socket.SendAsync(Encoding.UTF8.GetBytes(answer.ToJsonString()), WebSocketMessageType.Text, true, CancellationToken.None);
-        }
     }
+
+    private JsonObject AccountAuth(JsonObject payload, HashSet<long> authorized)
+    {
+        if (payload["accessToken"]?.GetValue<string>() != AccessToken) return Error("CH_ACCESS_TOKEN_INVALID", "Invalid access token");
+        var account = payload["ctidTraderAccountId"]?.GetValue<long>() ?? 0;
+        if (!Accounts.Any(a => OpenApiLong(a["ctidTraderAccountId"]) == account)) return Error("ACCOUNT_NOT_AUTHORIZED", "Account not reachable with this token");
+        authorized.Add(account);
+        return Ok(2103, new JsonObject { ["ctidTraderAccountId"] = account });
+    }
+
+    private static long OpenApiLong(JsonNode? node) => long.Parse(node!.ToString(), System.Globalization.CultureInfo.InvariantCulture);
 
     private JsonObject Refresh()
     {

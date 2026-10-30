@@ -6,6 +6,7 @@
 @using L1bre.Journal.Services
 
 @inject CTraderLinkService Links
+@inject TradeQueries Queries
 @inject UserManager<ApplicationUser> UserManager
 
 <PageTitle>cTrader accounts</PageTitle>
@@ -49,13 +50,20 @@ else
                 {
                     <span class="badge text-bg-danger">Link again</span>
                 }
+                else if (link.Status == LinkStatus.Unlinked)
+                {
+                    <span class="badge text-bg-secondary">Unlinked</span>
+                }
                 else
                 {
                     <span class="badge text-bg-success">Linked</span>
                 }
-                <button type="submit" name="RowAction" value="refresh:@link.Id" class="btn btn-sm btn-outline-secondary">Refresh accounts</button>
-                <button type="submit" name="RowAction" value="unlink:@link.Id" class="btn btn-sm btn-outline-danger"
-                        onclick="return confirm('Unlink this cTrader ID? Its tokens and account list are deleted from the journal.')">Unlink</button>
+                @if (link.Status != LinkStatus.Unlinked)
+                {
+                    <button type="submit" name="RowAction" value="refresh:@link.Id" class="btn btn-sm btn-outline-secondary">Refresh accounts</button>
+                    <button type="submit" name="RowAction" value="unlink:@link.Id" class="btn btn-sm btn-outline-danger"
+                            onclick="return confirm('Unlink this cTrader ID? Its tokens are deleted and its accounts stop importing. Trades already imported are kept.')">Unlink</button>
+                }
             </div>
             <div class="card-body">
                 <p class="small text-secondary mb-2">
@@ -72,6 +80,13 @@ else
                         cTrader no longer accepts this link (access revoked or token invalid).
                         Use <strong>Link a cTrader ID</strong> again with the same cTrader ID: the accounts and their choices are kept.
                     </div>
+                }
+                @if (link.Status == LinkStatus.Unlinked)
+                {
+                    <p class="small mb-2">
+                        The journal no longer has access to this cTrader ID; the trades imported from it are kept.
+                        Use <strong>Link a cTrader ID</strong> with the same cTrader ID to resume.
+                    </p>
                 }
                 @if (link.LastError is not null)
                 {
@@ -98,17 +113,30 @@ else
                                         @if (!account.IsAvailable) { <span class="ms-1">no longer available</span> }
                                     </td>
                                     <td>@(account.IsSelected ? "Yes" : "No")</td>
-                                    <td class="text-end">
+                                    <td class="text-end text-nowrap">
                                         @if (account.IsSelected)
                                         {
+                                            <button type="submit" name="RowAction" value="sync:@account.Id" class="btn btn-sm btn-outline-primary">Sync now</button>
                                             <button type="submit" name="RowAction" value="unselect:@account.Id" class="btn btn-sm btn-outline-secondary">Stop importing</button>
                                         }
-                                        else if (account.IsAvailable)
+                                        else if (account.IsAvailable && link.Status == LinkStatus.Active)
                                         {
                                             <button type="submit" name="RowAction" value="select:@account.Id" class="btn btn-sm btn-outline-primary">Import</button>
                                         }
                                     </td>
                                 </tr>
+                                @if (account.IsSelected || stats.ContainsKey(account.Id))
+                                {
+                                    <tr class="small text-secondary">
+                                        <td colspan="5" class="border-top-0 pt-0">
+                                            @SyncLine(account)
+                                            @if (account.LastSyncError is not null)
+                                            {
+                                                <div class="text-danger">Last sync problem (@Utc(account.LastSyncErrorAt)): @account.LastSyncError</div>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
                             }
                         </tbody>
                     </table>
@@ -121,13 +149,15 @@ else
 @if (links.Count > 0)
 {
     <p class="small text-secondary">
-        Importing trades comes with the next version of the journal; your choices are already saved.
+        Imported accounts are synced every 5 minutes. The first import reads the whole account history and builds
+        the charts a few dozen trades at a time, so it can take several rounds.
         You can also withdraw the journal's access from your cTrader ID settings, on cTrader's side.
     </p>
 }
 
 @code {
     private List<CTraderLink> links = [];
+    private Dictionary<Guid, AccountTradeStats> stats = [];
     private string? message;
     private string messageClass = "alert-info";
 
@@ -148,13 +178,34 @@ else
     protected override void OnInitialized() => ShowLinkResult();
 
     // Runs after the form handler, so the page shows the result of the action.
-    protected override async Task OnParametersSetAsync() => links = await Links.ListAsync(UserId);
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        links = await Links.ListAsync(UserId);
+        stats = await Queries.StatsAsync(links.SelectMany(l => l.Accounts).Select(a => a.Id).ToList());
+    }
+
+    private string SyncLine(TradingAccount account)
+    {
+        var parts = new List<string>();
+        if (account.SyncRequestedAt is not null) parts.Add("sync requested, starting shortly");
+        parts.Add(account.LastSyncAt is null ? "not synced yet" : $"synced {Utc(account.LastSyncAt)}");
+        if (stats.TryGetValue(account.Id, out var s))
+        {
+            parts.Add($"{s.Trades} trade{(s.Trades == 1 ? "" : "s")}");
+            if (s.ToQualify > 0) parts.Add($"{s.ToQualify} to qualify");
+            if (s.ChartsWaiting > 0) parts.Add($"{s.ChartsWaiting} chart{(s.ChartsWaiting == 1 ? "" : "s")} waiting");
+            if (s.ChartsFailed > 0) parts.Add($"{s.ChartsFailed} chart{(s.ChartsFailed == 1 ? "" : "s")} failed");
+        }
+        return string.Join(" · ", parts);
+    }
 
     private void ShowLinkResult()
     {
         (message, messageClass) = LinkResult switch
         {
-            "linked" => ("Your cTrader ID is linked. Tick the accounts to import below.", "alert-success"),
+            "linked" => ("Your cTrader ID is linked. Click Import on the accounts to import below.", "alert-success"),
             "cancelled" => ("Linking was cancelled on the cTrader page. Nothing was changed.", "alert-info"),
             "expired" => ("That linking attempt was too old or didn't start from this page. Please click Link a cTrader ID again.", "alert-warning"),
             "failed" => ($"cTrader refused the link: {Describe(LinkError)}", "alert-danger"),
@@ -180,6 +231,7 @@ else
         {
             case "select":
                 await Links.SetSelectedAsync(UserId, id, true);
+                (message, messageClass) = ("Import started: the first sync begins in a moment. Your trades appear under Trades.", "alert-info");
                 break;
             case "unselect":
                 await Links.SetSelectedAsync(UserId, id, false);
@@ -187,12 +239,16 @@ else
             case "refresh":
                 await Links.RefreshAccountsAsync(UserId, id, HttpContext.RequestAborted);
                 break;
+            case "sync":
+                await Links.RequestSyncAsync(UserId, id);
+                (message, messageClass) = ("Sync requested. Reload the page in a moment to see the result.", "alert-info");
+                break;
             case "unlink":
                 await Links.UnlinkAsync(UserId, id);
-                (message, messageClass) = ("The cTrader ID was unlinked.", "alert-info");
+                (message, messageClass) = ("The cTrader ID was unlinked. Its imported trades are kept.", "alert-info");
                 break;
         }
-        links = await Links.ListAsync(UserId);
+        await LoadAsync();
     }
 
     private static string Utc(DateTimeOffset? time) => time is null ? "never" : time.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm") + " UTC";

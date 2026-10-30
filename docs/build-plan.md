@@ -73,6 +73,11 @@ Phase 2 ideas (trend replay with L1bre.Core, Discord/email notification, CSV exp
 - Whether cTrader candles from the Open API are Bid-based (expected, as in the cBots) — checked at milestone 3 by comparing with your cTrader chart.
 - How far back the deal history goes — seen at the first import.
 - Whether one Open API application accepts several redirect URLs (for the later move to the L1bre domain).
+- Milestone 3 notes:
+  - Label and comment come from the order behind the fill (`ProtoOAOrderDetailsReq`), not from the fill itself as design v3 said.
+  - The first import starts at the account's registration date and reads one week per request (cTrader's limit), spaced by 250 ms (historical requests are limited to 5 per second).
+  - Net P&L = gross + swap + commission + conversion fee, from the closing fills. Still to compare with your cTrader history: whether that commission covers both sides.
+  - "Unlink" now keeps the imported trades (they will carry analyses); it erases the tokens and stops the imports.
 - Milestone 2 decision: no `cTrader.OpenAPI.Net` (it targets .NET 6). The app has its own small client using the Open API's **JSON over WebSocket** (port 5036), which needs no protobuf code.
 
 ---

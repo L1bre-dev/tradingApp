@@ -20,6 +20,7 @@ public class CTraderLinkService(
     IOptions<CTraderOptions> options,
     IConfiguration config,
     TimeProvider clock,
+    SyncSignal sync,
     ILogger<CTraderLinkService> logger)
 {
     public const string PendingCookie = "l1bre.ctrader.link";
@@ -111,7 +112,7 @@ public class CTraderLinkService(
     public async Task RefreshAccountsAsync(string userId, Guid linkId, CancellationToken ct = default)
     {
         var link = await db.CTraderLinks.Include(l => l.Accounts).SingleOrDefaultAsync(l => l.Id == linkId && l.UserId == userId, ct);
-        if (link is null) return;
+        if (link is null || link.Status == LinkStatus.Unlinked) return;
 
         await RunAsync(link, async () =>
         {
@@ -139,19 +140,63 @@ public class CTraderLinkService(
     {
         var account = await db.TradingAccounts.Include(a => a.CTraderLink)
             .SingleOrDefaultAsync(a => a.Id == accountId && a.CTraderLink!.UserId == userId);
-        if (account is null) return;
+        if (account is null || (selected && (!account.IsAvailable || account.CTraderLink!.Status != LinkStatus.Active))) return;
         account.IsSelected = selected;
+        if (selected) account.SyncRequestedAt = clock.GetUtcNow();
         await db.SaveChangesAsync();
+        if (selected) sync.Wake();
     }
 
-    /// <summary>Forgets the tokens and accounts of this cTrader ID.</summary>
+    /// <summary>
+    /// Erases the tokens of this cTrader ID and stops importing its accounts. Imported trades are kept
+    /// (they will carry analyses); linking the same cTrader ID again reactivates it.
+    /// </summary>
     public async Task UnlinkAsync(string userId, Guid linkId)
     {
-        var link = await db.CTraderLinks.SingleOrDefaultAsync(l => l.Id == linkId && l.UserId == userId);
+        var link = await db.CTraderLinks.Include(l => l.Accounts).SingleOrDefaultAsync(l => l.Id == linkId && l.UserId == userId);
         if (link is null) return;
-        db.CTraderLinks.Remove(link);
+        link.AccessTokenEncrypted = "";
+        link.RefreshTokenEncrypted = "";
+        link.Status = LinkStatus.Unlinked;
+        link.LastError = null;
+        link.LastErrorAt = null;
+        foreach (var account in link.Accounts) account.IsSelected = false;
         await db.SaveChangesAsync();
         logger.LogInformation("User {UserId} unlinked cTrader ID {CtidUserId}", userId, link.CtidUserId);
+    }
+
+    /// <summary>Asks the sync job to import this account now.</summary>
+    public async Task RequestSyncAsync(string userId, Guid accountId)
+    {
+        var account = await db.TradingAccounts.Include(a => a.CTraderLink)
+            .SingleOrDefaultAsync(a => a.Id == accountId && a.CTraderLink!.UserId == userId && a.IsSelected);
+        if (account is null) return;
+        account.SyncRequestedAt = clock.GetUtcNow();
+        await db.SaveChangesAsync();
+        sync.Wake();
+    }
+
+    /// <summary>
+    /// A valid access token for the sync, renewed first if it expires soon. Throws when the link can't be used;
+    /// a token refused by cTrader flags the link "Link again".
+    /// </summary>
+    public async Task<string> GetAccessTokenAsync(CTraderLink link, CancellationToken ct)
+    {
+        if (link.Status != LinkStatus.Active)
+            throw new CTraderException("LINK_NOT_ACTIVE", link.Status == LinkStatus.Unlinked ? "The cTrader ID is unlinked." : "The cTrader ID must be linked again.");
+        await RunAsync(link, () => RenewIfNeededAsync(link, ct));
+        await db.SaveChangesAsync(ct);
+        if (link.Status != LinkStatus.Active || link.LastError is not null)
+            throw new CTraderException("TOKEN_RENEWAL_FAILED", link.LastError);
+        return tokens.AccessToken(link);
+    }
+
+    /// <summary>Called when cTrader refuses the token during a sync.</summary>
+    public void MarkNeedsRelink(CTraderLink link, string error)
+    {
+        link.Status = LinkStatus.NeedsRelink;
+        link.LastError = error.Length > 500 ? error[..500] : error;
+        link.LastErrorAt = clock.GetUtcNow();
     }
 
     private async Task RenewIfNeededAsync(CTraderLink link, CancellationToken ct)
