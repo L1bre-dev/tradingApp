@@ -195,6 +195,267 @@ namespace L1bre.Journal.Data.Migrations
                     b.ToTable("Invitations");
                 });
 
+            modelBuilder.Entity("L1bre.Journal.Data.Trade", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CandlesAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CandlesError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("CandlesStatus")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("ClosedVolumeCents")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("Commission")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<decimal>("ConversionFee")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<int>("Digits")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<decimal>("EntryPrice")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<decimal?>("ExitPrice")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<decimal>("GrossProfit")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<DateTimeOffset>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long?>("LotSizeCents")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("NetProfit")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<DateTimeOffset>("OpenedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("OpeningOrderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OrderType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<decimal>("PipSize")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<decimal?>("Pips")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<long>("PositionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<decimal?>("StopLoss")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<decimal>("Swap")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<long>("SymbolId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SymbolName")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal?>("TakeProfit")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<string>("Technique")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Timeframe")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<Guid>("TradingAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("VolumeCents")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TradingAccountId", "OpenedAt");
+
+                    b.HasIndex("TradingAccountId", "PositionId")
+                        .IsUnique();
+
+                    b.ToTable("Trades");
+                });
+
+            modelBuilder.Entity("L1bre.Journal.Data.TradeCandle", b =>
+                {
+                    b.Property<Guid>("TradeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Timeframe")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateTimeOffset>("OpenTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Close")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<decimal>("High")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<bool>("IsCut")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("Low")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<decimal>("Open")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<long>("Volume")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("TradeId", "Timeframe", "OpenTime");
+
+                    b.ToTable("TradeCandles");
+                });
+
+            modelBuilder.Entity("L1bre.Journal.Data.TradeDeal", b =>
+                {
+                    b.Property<Guid>("TradingAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("DealId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("CloseCommission")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<long>("ClosedVolumeCents")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("Commission")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<decimal>("ConversionFee")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<DateTimeOffset>("ExecutedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("GrossProfit")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<bool>("IsClosing")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("OrderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("PositionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<string>("RawJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Side")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<decimal>("Swap")
+                        .HasPrecision(20, 8)
+                        .HasColumnType("numeric(20,8)");
+
+                    b.Property<long>("SymbolId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("VolumeCents")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("TradingAccountId", "DealId");
+
+                    b.HasIndex("TradingAccountId", "PositionId");
+
+                    b.ToTable("TradeDeals");
+                });
+
             modelBuilder.Entity("L1bre.Journal.Data.TradingAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -214,6 +475,13 @@ namespace L1bre.Journal.Data.Migrations
                     b.Property<long>("CtidTraderAccountId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("DepositCurrency")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTimeOffset?>("HistoryStart")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsAvailable")
                         .HasColumnType("boolean");
 
@@ -222,6 +490,25 @@ namespace L1bre.Journal.Data.Migrations
 
                     b.Property<bool>("IsSelected")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LastSyncAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastSyncError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("LastSyncErrorAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("MoneyDigits")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("SyncRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("SyncedUntil")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<long?>("TraderLogin")
                         .HasColumnType("bigint");
@@ -417,6 +704,35 @@ namespace L1bre.Journal.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("L1bre.Journal.Data.Trade", b =>
+                {
+                    b.HasOne("L1bre.Journal.Data.TradingAccount", "TradingAccount")
+                        .WithMany("Trades")
+                        .HasForeignKey("TradingAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TradingAccount");
+                });
+
+            modelBuilder.Entity("L1bre.Journal.Data.TradeCandle", b =>
+                {
+                    b.HasOne("L1bre.Journal.Data.Trade", null)
+                        .WithMany("Candles")
+                        .HasForeignKey("TradeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("L1bre.Journal.Data.TradeDeal", b =>
+                {
+                    b.HasOne("L1bre.Journal.Data.TradingAccount", null)
+                        .WithMany()
+                        .HasForeignKey("TradingAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("L1bre.Journal.Data.TradingAccount", b =>
                 {
                     b.HasOne("L1bre.Journal.Data.CTraderLink", "CTraderLink")
@@ -533,6 +849,16 @@ namespace L1bre.Journal.Data.Migrations
             modelBuilder.Entity("L1bre.Journal.Data.CTraderLink", b =>
                 {
                     b.Navigation("Accounts");
+                });
+
+            modelBuilder.Entity("L1bre.Journal.Data.Trade", b =>
+                {
+                    b.Navigation("Candles");
+                });
+
+            modelBuilder.Entity("L1bre.Journal.Data.TradingAccount", b =>
+                {
+                    b.Navigation("Trades");
                 });
 #pragma warning restore 612, 618
         }

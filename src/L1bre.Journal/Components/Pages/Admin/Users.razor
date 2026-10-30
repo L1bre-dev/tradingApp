@@ -14,6 +14,7 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject NavigationManager Navigation
 @inject TimeProvider Clock
+@inject TradeQueries Trades
 
 <PageTitle>Admin</PageTitle>
 
@@ -91,9 +92,42 @@
     </section>
 </form>
 
+<section class="mt-5">
+    <h2 class="h4">cTrader sync</h2>
+    <p class="text-secondary small">Every imported account, for checking the sync without SSH. Times in UTC.</p>
+    @if (syncAccounts.Count == 0)
+    {
+        <p>No account is being imported.</p>
+    }
+    else
+    {
+        <table class="table table-sm align-middle small">
+            <thead><tr><th>Trader</th><th>Account</th><th>Link</th><th>Last sync</th><th>Synced up to</th><th>Trades</th><th>Charts waiting / failed</th><th>Last problem</th></tr></thead>
+            <tbody>
+                @foreach (var account in syncAccounts)
+                {
+                    var s = syncStats.GetValueOrDefault(account.Id);
+                    <tr>
+                        <td>@account.CTraderLink?.User?.Email</td>
+                        <td>@(account.TraderLogin?.ToString() ?? $"#{account.CtidTraderAccountId}") @(account.IsLive ? "Live" : "Demo")</td>
+                        <td>@account.CTraderLink?.Status</td>
+                        <td>@(account.LastSyncAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "never")</td>
+                        <td>@(account.SyncedUntil?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "")</td>
+                        <td>@(s?.Trades ?? 0)</td>
+                        <td>@(s?.ChartsWaiting ?? 0) / @(s?.ChartsFailed ?? 0)</td>
+                        <td class="text-danger">@(account.LastSyncError ?? account.CTraderLink?.LastError)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
 @code {
     private List<(ApplicationUser User, IList<string> Roles)> users = [];
     private List<Invitation> invitations = [];
+    private List<TradingAccount> syncAccounts = [];
+    private Dictionary<Guid, AccountTradeStats> syncStats = [];
     private string? link;
     private string? linkLabel;
 
@@ -117,6 +151,8 @@
         foreach (var user in await UserManager.Users.OrderBy(u => u.CreatedAt).ToListAsync())
             users.Add((user, await UserManager.GetRolesAsync(user)));
         invitations = await Invitations.ListAsync();
+        syncAccounts = await Trades.SelectedAccountsAsync();
+        syncStats = await Trades.StatsAsync(syncAccounts.Select(a => a.Id).ToList());
     }
 
     private async Task CreateInvitationAsync()

@@ -12,7 +12,7 @@ Runs at https://fta.trading. The cBots themselves live in the separate `L1bre-de
 
 ```
 src/L1bre.Journal/              Blazor Server web app (.NET 10), EF Core + PostgreSQL, ASP.NET Identity
-src/L1bre.Journal.Domain/       plain C# rules, no web or database code (unit-tested)
+src/L1bre.Journal.Domain/       plain C# rules, no web or database code (unit-tested): fills → trades, cut candle, qualification
 src/L1bre.Journal.CTrader/      the only code talking to cTrader Open API (OAuth + JSON over WebSocket)
 tests/L1bre.Journal.Domain.Tests/
 tests/L1bre.Journal.CTrader.Tests/  cTrader client tests, run against the fake server below
@@ -49,10 +49,15 @@ dotnet run --project tests/FakeCTrader          # listens on http://127.0.0.1:50
 cd src/L1bre.Journal
 CTrader__ClientId=fake-client-id CTrader__ClientSecret=fake-client-secret \
 CTrader__AuthorizeUrl=http://127.0.0.1:5099/authorize CTrader__TokenUrl=http://127.0.0.1:5099/apps/token \
-CTrader__DemoEndpoint=ws://127.0.0.1:5099/ dotnet run
+CTrader__DemoEndpoint=ws://127.0.0.1:5099/ CTrader__LiveEndpoint=ws://127.0.0.1:5099/ dotnet run
 ```
 
-"Link a cTrader ID" then links a fake cTrader ID with one demo and one live account.
+"Link a cTrader ID" then links a fake cTrader ID with one demo and one live account. Clicking Import on one
+imports the fake history (a Frame M15 win, a manual loss, a Frame H1 closed in two parts, a rejected order
+that must not appear, and a Frame M5 still open) with its candles. `curl http://127.0.0.1:5099/test/close-open-position`
+closes the open one, to check that the next sync updates it.
+
+The sync runs every 5 minutes (`Sync__IntervalMinutes`) and on "Sync now".
 
 ## Database changes
 

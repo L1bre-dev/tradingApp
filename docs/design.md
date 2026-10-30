@@ -40,7 +40,7 @@ Verified:
 - Linking = OAuth on `id.ctrader.com`. We ask only for scope `accounts` = **view only** (the app can never trade).
 - One token covers **all trading accounts of a cTrader ID**; the user ticks which ones to import.
 - Access token ~30 days, refresh token never expires; the app refreshes automatically.
-- `ProtoOADealListReq` returns fills between two dates (paged). Each fill carries the order's **label** and **comment** → Frame trades arrive already qualified (label `Frame`, comment `M15`).
+- `ProtoOADealListReq` returns fills between two dates (paged). **Correction (milestone 3, checked in the official proto files):** a fill (`ProtoOADeal`) does **not** carry the label or comment. They are on the order (`ProtoOAOrder.tradeData`), read once per new trade with `ProtoOAOrderDetailsReq` (which also gives the SL/TP). Frame trades still arrive already qualified (label `Frame`, comment `M15`).
 - `ProtoOAGetTrendbarsReq` returns candles for a symbol, timeframe and date range, with a `count` (max 14,000 bars per request; we need 54).
 - Rate limit: **5 requests/s for history** (deals, candles). Only matters for the first import.
 

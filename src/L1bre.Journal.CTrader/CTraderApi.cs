@@ -96,15 +96,26 @@ public class CTraderApi(HttpClient http, IOptions<CTraderOptions> options, TimeP
     }
 
     /// <summary>
-    /// Opens a connection and authorises our application on it, which every Open API session must do first.
-    /// Token-level calls (profile, account list, refresh) work on either endpoint; demo is used.
+    /// Opens a session on one trading account to read its history. Live accounts are served by the live
+    /// endpoint and demo accounts by the demo one.
     /// </summary>
-    private async Task<OpenApiConnection> OpenAuthorizedAsync(CancellationToken ct)
+    public async Task<CTraderAccountSession> OpenAccountAsync(string accessToken, long ctidTraderAccountId, bool isLive, CancellationToken ct = default)
+    {
+        var connection = await OpenAuthorizedAsync(ct, isLive);
+        return await CTraderAccountSession.OpenAsync(connection, ctidTraderAccountId, accessToken, logger, ct);
+    }
+
+    /// <summary>
+    /// Opens a connection and authorises our application on it, which every Open API session must do first.
+    /// Token-level calls (profile, account list, refresh) work on either endpoint; demo is used
+    /// (confirmed by the first real link, 2026-10-30).
+    /// </summary>
+    private async Task<OpenApiConnection> OpenAuthorizedAsync(CancellationToken ct, bool live = false)
     {
         if (!Options.IsConfigured)
             throw new CTraderException("NOT_CONFIGURED", "CTrader__ClientId and CTrader__ClientSecret are not set.");
 
-        var connection = await OpenApiConnection.OpenAsync(new Uri(Options.DemoEndpoint), logger, ct);
+        var connection = await OpenApiConnection.OpenAsync(new Uri(live ? Options.LiveEndpoint : Options.DemoEndpoint), logger, ct);
         try
         {
             await connection.RequestAsync(PayloadTypes.ApplicationAuthReq, new JsonObject

@@ -51,6 +51,34 @@ public sealed record OpenApiMessage(int PayloadType, JsonObject Payload, string?
         return null;
     }
 
+    public static double? ReadDouble(JsonNode? node)
+    {
+        if (node is not JsonValue value) return null;
+        if (value.TryGetValue<double>(out var d)) return d;
+        if (value.TryGetValue<long>(out var l)) return l;
+        if (value.TryGetValue<string>(out var s) && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        return null;
+    }
+
+    public static string? ReadString(JsonNode? node) => node is JsonValue v ? v.ToString() : null;
+
+    /// <summary>
+    /// An enum value: the JSON gateway may send its number (1) or its name ("BUY"); both are accepted
+    /// and the number is returned. <paramref name="names"/> lists the names by number.
+    /// </summary>
+    public static int? ReadEnum(JsonNode? node, IReadOnlyDictionary<string, int> names)
+    {
+        if (node is not JsonValue value) return null;
+        if (value.TryGetValue<int>(out var i)) return i;
+        if (value.TryGetValue<long>(out var l)) return (int)l;
+        if (value.TryGetValue<string>(out var s))
+        {
+            if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)) return n;
+            if (names.TryGetValue(s, out var named)) return named;
+        }
+        return null;
+    }
+
     public static bool? ReadBool(JsonNode? node)
     {
         if (node is not JsonValue value) return null;

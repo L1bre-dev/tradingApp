@@ -10,4 +10,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\L1bre.Journal.Domain\L1bre.Journal.Domain.csproj" />
+  </ItemGroup>
+
 </Project>
