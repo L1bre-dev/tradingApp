@@ -1,0 +1,10 @@
+@switch (Outcome)
+{
+    case "Win": <span class="badge text-bg-success">Win</span> break;
+    case "Loss": <span class="badge text-bg-danger">Loss</span> break;
+    default: <span class="badge text-bg-secondary">Open</span> break;
+}
+
+@code {
+    [Parameter] public string? Outcome { get; set; }
+}

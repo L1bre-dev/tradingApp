@@ -1,0 +1,253 @@
+@page "/trades/{Id:guid}"
+@attribute [Authorize(Policy = Roles.Trader)]
+
+@using System.Globalization
+@using System.Text.Json
+@using Microsoft.AspNetCore.Identity
+@using L1bre.Journal.Data
+@using L1bre.Journal.Domain.Trades
+@using L1bre.Journal.Services
+
+@inject TradeQueries Queries
+@inject TradeService Trades
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager Navigation
+
+<PageTitle>@(view is null ? "Trade" : $"{view.Trade.SymbolName} {view.Trade.Direction} {Time(view.Trade.OpenedAt, "yyyy-MM-dd HH:mm")}")</PageTitle>
+
+@if (view is null)
+{
+    <h1>Trade not found</h1>
+    <p>This trade doesn't exist or isn't one of yours. <a href="trades">Back to your trades</a></p>
+    return;
+}
+
+@{ var trade = view.Trade; var account = trade.TradingAccount!; }
+
+<p class="mb-2"><a href="trades?account=@account.Id">&larr; Trades of account @account.TraderLogin</a></p>
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <h1 class="h3 mb-0 me-2">@trade.SymbolName @trade.Direction <span class="text-secondary fs-6">filled @Time(trade.OpenedAt, "yyyy-MM-dd HH:mm:ss.fff") UTC</span></h1>
+    <OutcomeBadge Outcome="@trade.Outcome" />
+    @if (trade.Status == TradeStatus.ToQualify) { <span class="badge text-bg-warning">to qualify</span> }
+    else { <span class="badge text-bg-light border">@trade.Technique @trade.Timeframe</span> }
+    <span class="ms-auto d-flex gap-2">
+        @if (view.Newer is { } newer) { <a class="btn btn-sm btn-outline-secondary" href="trades/@newer">&larr; Newer</a> }
+        @if (view.Older is { } older) { <a class="btn btn-sm btn-outline-secondary" href="trades/@older">Older &rarr;</a> }
+        @if (view.NextToQualify is { } next) { <a class="btn btn-sm btn-outline-warning" href="trades/@next">Next to qualify</a> }
+    </span>
+</div>
+
+@if (message is not null)
+{
+    <div class="alert @messageClass" role="status">@message</div>
+}
+
+@if (view.Charts.Count == 0)
+{
+    <div class="alert alert-secondary">
+        @switch (trade.CandlesStatus)
+        {
+            case CandlesStatus.Failed:
+                <text>The candles of this trade could not be read from cTrader (@trade.CandlesAttempts attempts): @trade.CandlesError</text>
+                break;
+            default:
+                <text>The candles of this trade aren't stored yet: they come with one of the next syncs.</text>
+                break;
+        }
+    </div>
+}
+else
+{
+    @if (view.Charts.Count > 1)
+    {
+        <div class="btn-group btn-group-sm mb-2" role="group" aria-label="Timeframe">
+            @foreach (var tf in view.Charts.Keys)
+            {
+                <button type="button" class="btn btn-outline-primary" data-chart-tf="@tf">@tf</button>
+            }
+        </div>
+    }
+    <trade-chart data-chart="@chartJson"></trade-chart>
+    <p class="small text-secondary mt-1">
+        The 54 candles up to the fill. The last one is cut at the fill moment (drawn lighter), so nothing after the entry is shown.
+        Candles are cTrader Bid prices: a Buy fills at Ask, about one spread above. Times in UTC.
+        Chart by <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView</a> Lightweight Charts™.
+    </p>
+}
+
+<div class="row g-3 mt-1">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">Trade</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0 small">
+                    <tbody>
+                        <tr><th class="ps-3">Account</th><td>@account.TraderLogin @(account.IsLive ? "Live" : "Demo") · @account.BrokerName</td></tr>
+                        <tr><th class="ps-3">Volume</th><td>@TradeFormat.Lots(trade) lot@(trade.Lots == 1 ? "" : "s")</td></tr>
+                        <tr><th class="ps-3">Entry</th><td>@TradeFormat.Price(trade, trade.EntryPrice) <span class="text-secondary">(@(trade.OrderType?.ToLowerInvariant() ?? "?") order)</span></td></tr>
+                        <tr><th class="ps-3">Stop loss</th><td>@Level(trade, trade.StopLoss)</td></tr>
+                        <tr><th class="ps-3">Take profit</th><td>@Level(trade, trade.TakeProfit)</td></tr>
+                        @if (RiskReward(trade) is { } rr)
+                        {
+                            <tr><th class="ps-3">Reward / risk</th><td>@rr.ToString("0.00", CultureInfo.InvariantCulture)</td></tr>
+                        }
+                        @if (trade.ClosedAt is { } closed)
+                        {
+                            <tr><th class="ps-3">Closed</th><td>@Time(closed, "yyyy-MM-dd HH:mm:ss") UTC at @TradeFormat.Price(trade, trade.ExitPrice)
+                                (@(trade.Pips?.ToString("0", CultureInfo.InvariantCulture)) pips)</td></tr>
+                            <tr><th class="ps-3">Gross</th><td>@Money(trade.GrossProfit)</td></tr>
+                            <tr><th class="ps-3">Swap · commission</th><td>@Money(trade.Swap) · @Money(trade.Commission)
+                                @if (trade.ConversionFee != 0) { <text> · conversion @Money(trade.ConversionFee)</text> }</td></tr>
+                            <tr><th class="ps-3">Net P&amp;L</th><td class="@(trade.NetProfit > 0 ? "text-success" : "text-danger") fw-semibold">@Money(trade.NetProfit)</td></tr>
+                        }
+                        else
+                        {
+                            <tr><th class="ps-3">Closed</th><td>still open@(trade.ClosedVolumeCents > 0 ? " (partly closed)" : "")</td></tr>
+                        }
+                        <tr><th class="ps-3">Order</th><td class="text-secondary">label @(trade.Label ?? "none") · comment @(trade.Comment ?? "none") · position @trade.PositionId</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card @(trade.Status == TradeStatus.ToQualify ? "border-warning" : "")">
+            <div class="card-header">@(trade.Status == TradeStatus.ToQualify ? "To qualify" : "Qualification")</div>
+            <div class="card-body">
+                @if (trade.Status == TradeStatus.Qualified)
+                {
+                    <p class="mb-2"><strong>@trade.Technique</strong> on <strong>@trade.Timeframe</strong>
+                        <span class="text-secondary small">
+                            @(trade.Origin == "Bot" && trade.Technique == trade.Label && trade.Timeframe == Timeframes.TryParse(trade.Comment)?.Label
+                                ? "(from the order's label and comment)" : "(chosen by you)")
+                        </span>
+                    </p>
+                }
+                else
+                {
+                    <p class="small">Pick the technique and the timeframe this trade was taken on. The chart follows the timeframe you pick.</p>
+                }
+
+                @if (view.Charts.Count == 0)
+                {
+                    <p class="small text-secondary mb-0">It can be qualified once its candles are stored.</p>
+                }
+                else if (trade.Status == TradeStatus.ToQualify || formError is not null)
+                {
+                    @QualifyForm(trade)
+                }
+                else
+                {
+                    <details>
+                        <summary class="small">Change</summary>
+                        <div class="mt-2">@QualifyForm(trade)</div>
+                    </details>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    [SupplyParameterFromQuery(Name = "saved")] private bool Saved { get; set; }
+
+    [SupplyParameterFromForm(FormName = "qualify")] private string? Technique { get; set; }
+    [SupplyParameterFromForm(FormName = "qualify")] private string? Timeframe { get; set; }
+    [SupplyParameterFromForm(FormName = "qualify")] private string? Then { get; set; }
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private TradeView? view;
+    private string chartJson = "";
+    private string? message, messageClass, formError;
+
+    private string UserId => UserManager.GetUserId(HttpContext.User)!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        if (Saved) (message, messageClass) = ("Qualification saved.", "alert-success");
+    }
+
+    private async Task LoadAsync()
+    {
+        view = await Queries.GetAsync(UserId, Id);
+        if (view is null) return;
+        var t = view.Trade;
+        chartJson = JsonSerializer.Serialize(new
+        {
+            digits = t.Digits,
+            direction = t.Direction,
+            entry = t.EntryPrice,
+            sl = t.StopLoss,
+            tp = t.TakeProfit,
+            fill = t.OpenedAt.ToUnixTimeMilliseconds() / 1000.0,
+            timeframe = t.Timeframe ?? (view.Charts.ContainsKey("M15") ? "M15" : view.Charts.Keys.FirstOrDefault()),
+            charts = view.Charts.ToDictionary(c => c.Key, c => c.Value.Select(b => new object[]
+                { b.OpenTime.ToUnixTimeSeconds(), b.Open, b.High, b.Low, b.Close, b.IsCut })),
+        });
+    }
+
+    private async Task QualifyAsync()
+    {
+        formError = await Trades.QualifyAsync(UserId, Id, Technique, Timeframe);
+        if (formError is not null)
+        {
+            (message, messageClass) = (formError, "alert-danger");
+            await LoadAsync();
+            return;
+        }
+        var next = Then == "next" && view is not null ? await Queries.NextToQualifyAsync(view.Trade.TradingAccountId, Id) : null;
+        Navigation.NavigateTo(next is { } nextId ? $"trades/{nextId}" : $"trades/{Id}?saved=true");
+    }
+
+    private RenderFragment QualifyForm(Trade trade) => __builder =>
+    {
+        var technique = formError is not null ? Technique : trade.Technique;
+        var timeframe = formError is not null ? Timeframe : trade.Timeframe;
+        <form method="post" action="trades/@Id" @formname="qualify" @onsubmit="QualifyAsync">
+            <AntiforgeryToken />
+            <div class="mb-2">
+                <label class="form-label small mb-0" for="q-technique">Technique</label>
+                <select id="q-technique" name="Technique" class="form-select form-select-sm" required>
+                    <option value="">Choose…</option>
+                    @foreach (var t in Qualification.Techniques)
+                    {
+                        <option value="@t" selected="@(t == technique)">@t</option>
+                    }
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small mb-0" for="q-tf">Timeframe</label>
+                <select id="q-tf" name="Timeframe" class="form-select form-select-sm" data-chart-tf-select required>
+                    <option value="">Choose…</option>
+                    @foreach (var tf in view!.Charts.Keys)
+                    {
+                        <option value="@tf" selected="@(tf == timeframe)">@tf</option>
+                    }
+                </select>
+            </div>
+            <button type="submit" name="Then" value="stay" class="btn btn-sm btn-primary">Save</button>
+            @if (view.NextToQualify is not null || trade.Status == TradeStatus.ToQualify)
+            {
+                <button type="submit" name="Then" value="next" class="btn btn-sm btn-outline-primary">Save and next to qualify</button>
+            }
+        </form>
+    };
+
+    private string Money(decimal amount) => TradeFormat.Money(amount, view?.Trade.TradingAccount?.DepositCurrency);
+
+    private static string Time(DateTimeOffset time, string format) => time.UtcDateTime.ToString(format, CultureInfo.InvariantCulture);
+
+    private static string Level(Trade trade, decimal? level) =>
+        level is null ? "none" : $"{TradeFormat.Price(trade, level)} ({TradeFormat.Pips(trade, trade.EntryPrice, level)?.ToString("0.#", CultureInfo.InvariantCulture)} pips)";
+
+    private static decimal? RiskReward(Trade trade) =>
+        TradeFormat.Pips(trade, trade.EntryPrice, trade.StopLoss) is { } risk and > 0 && TradeFormat.Pips(trade, trade.EntryPrice, trade.TakeProfit) is { } reward
+            ? Math.Round(reward / risk, 2) : null;
+}

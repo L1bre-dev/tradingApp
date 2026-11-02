@@ -4,6 +4,7 @@
 @using System.Globalization
 @using Microsoft.AspNetCore.Identity
 @using L1bre.Journal.Data
+@using L1bre.Journal.Domain.Trades
 @using L1bre.Journal.Services
 
 @inject TradeQueries Queries
@@ -13,91 +14,174 @@
 
 <h1>Trades</h1>
 
-<p class="text-secondary">
-    Trades imported from your cTrader accounts, newest first (times in UTC). Bot trades take their technique and timeframe
-    from the order (label <code>Frame</code>, comment <code>M15</code>); the others are <em>to qualify</em>.
-    The chart pages come next; for now this list shows which charts are stored.
-</p>
-
-@if (trades.Count == 0)
+@if (tabs.Count == 0)
 {
     <p>No trade yet. On <a href="accounts">cTrader accounts</a>, click <strong>Import</strong> on an account, then come back after the first sync.</p>
 }
 else
 {
-    <p class="small text-secondary">
-        @trades.Count trade@(trades.Count == 1 ? "" : "s") shown@(trades.Count == MaxShown ? $" (the latest {MaxShown})" : "") ·
-        @trades.Count(t => t.Trade.Outcome == "Win") won · @trades.Count(t => t.Trade.Outcome == "Loss") lost ·
-        @trades.Count(t => t.Trade.Outcome == "Open") open · @trades.Count(t => t.Trade.Status == TradeStatus.ToQualify) to qualify
-    </p>
-    <div class="table-responsive">
-        <table class="table table-sm table-hover align-middle small">
-            <thead>
-                <tr>
-                    <th>Opened</th><th>Account</th><th>Symbol</th><th>Side</th><th class="text-end">Lots</th>
-                    <th class="text-end">Entry</th><th class="text-end">SL</th><th class="text-end">TP</th>
-                    <th>Closed</th><th class="text-end">Exit</th><th class="text-end">Net P&amp;L</th><th class="text-end">Pips</th><th>Result</th>
-                    <th>Technique</th><th>TF</th><th>Charts</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var (trade, charts) in trades)
+    @* One tab per trading account: trades of different accounts are never mixed. *@
+    <ul class="nav nav-tabs mb-3">
+        @foreach (var tab in tabs)
+        {
+            <li class="nav-item">
+                <a class="nav-link @(tab.Id == account!.Id ? "active" : "")" href="@Url(tab.Id, null, null, null, 1)">
+                    @(tab.TraderLogin?.ToString() ?? "?")
+                    <span class="badge @(tab.IsLive ? "text-bg-warning" : "text-bg-info")">@(tab.IsLive ? "Live" : "Demo")</span>
+                    <span class="text-secondary small" title="trades">@tab.Trades</span>
+                    @if (tab.ToQualify > 0) { <span class="badge text-bg-warning" title="to qualify">@tab.ToQualify</span> }
+                </a>
+            </li>
+        }
+    </ul>
+
+    <form method="get" action="trades" class="row g-2 align-items-end mb-3">
+        <input type="hidden" name="account" value="@account!.Id" />
+        <div class="col-auto">
+            <label class="form-label small mb-0" for="show">Show</label>
+            <select id="show" name="show" class="form-select form-select-sm" onchange="this.form.submit()">
+                @foreach (var (value, label) in ShowOptions)
                 {
-                    <tr>
-                        <td class="text-nowrap">@trade.OpenedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)</td>
-                        <td>@(trade.TradingAccount?.TraderLogin?.ToString() ?? "?")</td>
-                        <td>@trade.SymbolName</td>
-                        <td>@trade.Direction</td>
-                        <td class="text-end">@(trade.Lots?.ToString("0.##", CultureInfo.InvariantCulture) ?? Units(trade.VolumeCents))</td>
-                        <td class="text-end">@Price(trade, trade.EntryPrice)</td>
-                        <td class="text-end">@Price(trade, trade.StopLoss)</td>
-                        <td class="text-end">@Price(trade, trade.TakeProfit)</td>
-                        <td class="text-nowrap">@(trade.ClosedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "")</td>
-                        <td class="text-end">@Price(trade, trade.ExitPrice)</td>
-                        <td class="text-end @(trade.NetProfit > 0 ? "text-success" : trade.Outcome == "Open" ? "" : "text-danger")">
-                            @(trade.Outcome == "Open" ? "" : $"{trade.NetProfit.ToString("0.00", CultureInfo.InvariantCulture)} {trade.TradingAccount?.DepositCurrency}")
-                        </td>
-                        <td class="text-end">@(trade.Pips?.ToString("0", CultureInfo.InvariantCulture) ?? "")</td>
-                        <td>
-                            @switch (trade.Outcome)
-                            {
-                                case "Win": <span class="badge text-bg-success">Win</span> break;
-                                case "Loss": <span class="badge text-bg-danger">Loss</span> break;
-                                default: <span class="badge text-bg-secondary">Open</span> break;
-                            }
-                        </td>
-                        <td>@(trade.Technique ?? (trade.Origin == "Manual" ? "Manual" : trade.Label))</td>
-                        <td>
-                            @if (trade.Status == TradeStatus.ToQualify) { <span class="badge text-bg-warning">to qualify</span> }
-                            else { @trade.Timeframe }
-                        </td>
-                        <td class="text-nowrap">
-                            @switch (trade.CandlesStatus)
-                            {
-                                case CandlesStatus.Stored: <span title="54 candles per timeframe">@string.Join(" ", charts)</span> break;
-                                case CandlesStatus.Pending: <span class="text-secondary">waiting</span> break;
-                                default: <span class="text-danger" title="@trade.CandlesError">failed (@trade.CandlesAttempts×)</span> break;
-                            }
-                        </td>
-                    </tr>
+                    <option value="@value" selected="@(value == (Show ?? ""))">@label@(value == "toqualify" ? $" ({account.ToQualify})" : "")</option>
                 }
-            </tbody>
-        </table>
-    </div>
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label small mb-0" for="technique">Technique</label>
+            <select id="technique" name="technique" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All</option>
+                @foreach (var t in Qualification.Techniques)
+                {
+                    <option value="@t" selected="@(t == Technique)">@t</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label small mb-0" for="tf">Timeframe</label>
+            <select id="tf" name="tf" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All</option>
+                @foreach (var tf in Timeframes.All)
+                {
+                    <option value="@tf.Label" selected="@(tf.Label == Tf)">@tf.Label</option>
+                }
+            </select>
+        </div>
+        <noscript><div class="col-auto"><button type="submit" class="btn btn-sm btn-secondary">Apply</button></div></noscript>
+    </form>
+
+    @if (result.Total == 0)
+    {
+        <p class="text-secondary">No trade matches these filters on this account.</p>
+    }
+    else
+    {
+        <p class="small text-secondary">
+            @result.Total trade@(result.Total == 1 ? "" : "s") ·
+            @result.Wins won · @result.Losses lost ·
+            net P&amp;L <span class="@(result.NetProfit >= 0 ? "text-success" : "text-danger")">@Money(result.NetProfit)</span> ·
+            times in UTC · click a row to open its chart
+        </p>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle small trades">
+                <thead>
+                    <tr>
+                        <th>Opened</th><th>Symbol</th><th>Side</th><th class="text-end">Lots</th>
+                        <th class="text-end">Entry</th><th class="text-end">SL</th><th class="text-end">TP</th>
+                        <th>Closed</th><th class="text-end">Exit</th><th class="text-end text-nowrap">Net P&amp;L</th><th class="text-end">Pips</th><th>Result</th>
+                        <th>Technique</th><th>TF</th><th>Chart</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (trade, charts) in result.Trades)
+                    {
+                        <tr>
+                            <td class="text-nowrap"><a href="trades/@trade.Id" class="stretched-link">@trade.OpenedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)</a></td>
+                            <td>@trade.SymbolName</td>
+                            <td>@trade.Direction</td>
+                            <td class="text-end">@TradeFormat.Lots(trade)</td>
+                            <td class="text-end">@TradeFormat.Price(trade, trade.EntryPrice)</td>
+                            <td class="text-end">@TradeFormat.Price(trade, trade.StopLoss)</td>
+                            <td class="text-end">@TradeFormat.Price(trade, trade.TakeProfit)</td>
+                            <td class="text-nowrap">@(trade.ClosedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "")</td>
+                            <td class="text-end">@TradeFormat.Price(trade, trade.ExitPrice)</td>
+                            <td class="text-end text-nowrap @(trade.NetProfit > 0 ? "text-success" : trade.Outcome == "Open" ? "" : "text-danger")">
+                                @(trade.Outcome == "Open" ? "" : Money(trade.NetProfit))
+                            </td>
+                            <td class="text-end">@(trade.Pips?.ToString("0", CultureInfo.InvariantCulture) ?? "")</td>
+                            <td><OutcomeBadge Outcome="@trade.Outcome" /></td>
+                            <td>@(trade.Technique ?? (trade.Origin == "Manual" ? "Manual" : trade.Label))</td>
+                            <td>
+                                @if (trade.Status == TradeStatus.ToQualify) { <span class="badge text-bg-warning">to qualify</span> }
+                                else { @trade.Timeframe }
+                            </td>
+                            <td class="text-nowrap">
+                                @switch (trade.CandlesStatus)
+                                {
+                                    case CandlesStatus.Stored: <span class="text-secondary" title="Stored timeframes">@string.Join(" ", charts)</span> break;
+                                    case CandlesStatus.Pending: <span class="text-secondary">waiting</span> break;
+                                    default: <span class="text-danger" title="@trade.CandlesError">failed (@trade.CandlesAttempts×)</span> break;
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (pages > 1)
+        {
+            <nav class="d-flex gap-2 align-items-center small">
+                @if (CurrentPage > 1) { <a class="btn btn-sm btn-outline-secondary" href="@Url(account.Id, Show, Technique, Tf, CurrentPage - 1)">Newer</a> }
+                <span class="text-secondary">page @CurrentPage of @pages</span>
+                @if (CurrentPage < pages) { <a class="btn btn-sm btn-outline-secondary" href="@Url(account.Id, Show, Technique, Tf, CurrentPage + 1)">Older</a> }
+            </nav>
+        }
+    }
 }
 
 @code {
-    private const int MaxShown = 500;
-    private List<(Trade Trade, List<string> ChartTimeframes)> trades = [];
+    private const int PageSize = 100;
+
+    private static readonly (string Value, string Label)[] ShowOptions =
+        [("", "All trades"), ("toqualify", "To qualify"), ("win", "Wins"), ("loss", "Losses"), ("open", "Open")];
+
+    [SupplyParameterFromQuery(Name = "account")] private Guid? AccountId { get; set; }
+    [SupplyParameterFromQuery(Name = "show")] private string? Show { get; set; }
+    [SupplyParameterFromQuery(Name = "technique")] private string? Technique { get; set; }
+    [SupplyParameterFromQuery(Name = "tf")] private string? Tf { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] private int? PageNumber { get; set; }
 
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
-    protected override async Task OnInitializedAsync() =>
-        trades = await Queries.ListAsync(UserManager.GetUserId(HttpContext.User)!, MaxShown);
+    private List<AccountTab> tabs = [];
+    private AccountTab? account;
+    private TradePage result = new([], 0, 0, 0, 0);
+    private int pages;
+    private int CurrentPage => Math.Max(1, PageNumber ?? 1);
 
-    private static string Price(Trade trade, decimal? price) =>
-        price?.ToString("F" + trade.Digits, CultureInfo.InvariantCulture) ?? "";
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = UserManager.GetUserId(HttpContext.User)!;
+        tabs = await Queries.AccountTabsAsync(userId);
+        if (tabs.Count == 0) return;
 
-    private static string Units(long cents) => (cents / 100m).ToString("0.##", CultureInfo.InvariantCulture) + " u";
+        // Without a choice, open the account traded most recently.
+        account = tabs.FirstOrDefault(t => t.Id == AccountId)
+            ?? tabs.OrderByDescending(t => t.LastTradeAt ?? DateTimeOffset.MinValue).First();
+        result = await Queries.ListAsync(userId, account.Id, new TradeFilter(Show, Technique, Tf), CurrentPage, PageSize);
+        pages = (result.Total + PageSize - 1) / PageSize;
+    }
+
+    private string Money(decimal amount) => TradeFormat.Money(amount, account?.Currency);
+
+    private static string Url(Guid account, string? show, string? technique, string? tf, int page)
+    {
+        var query = new List<string> { $"account={account}" };
+        if (!string.IsNullOrEmpty(show)) query.Add($"show={Uri.EscapeDataString(show)}");
+        if (!string.IsNullOrEmpty(technique)) query.Add($"technique={Uri.EscapeDataString(technique)}");
+        if (!string.IsNullOrEmpty(tf)) query.Add($"tf={Uri.EscapeDataString(tf)}");
+        if (page > 1) query.Add($"page={page}");
+        return "trades?" + string.Join("&", query);
+    }
 }

@@ -69,6 +69,7 @@ builder.Services.AddHostedService<TokenRenewalWorker>();
 builder.Services.AddSingleton<SyncSignal>();
 builder.Services.AddScoped<TradeSyncService>();
 builder.Services.AddScoped<TradeQueries>();
+builder.Services.AddScoped<TradeService>();
 builder.Services.AddHostedService<SyncWorker>();
 
 builder.Services.AddHealthChecks().AddDbContextCheck<ApplicationDbContext>();

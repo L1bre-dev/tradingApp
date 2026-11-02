@@ -41,7 +41,7 @@ Same idea as `L1bre.Core` for the cBots: every decision (how fills become a trad
 | **1. Skeleton online** | Blazor Server app with login, invitations, roles (trader / coach / admin), PostgreSQL, Docker Compose, Caddy, GitHub Actions image, VPS install guide | Open https://fta.trading, accept your admin invitation, log in |
 | **2. Link cTrader** | OAuth with view-only scope, list of accounts of each cTrader ID, tick the accounts to import, encrypted tokens + automatic refresh, re-link flow | Link your cTrader ID, see your Fusion demo account listed |
 | **3. Sync trades + candles** | Every 5 min + Sync now; first import of history (throttled); fills → trades; bot trades qualified from label/comment, manual trades "to qualify"; 54 candles stored (1 TF for bot trades, M1→H4 for manual), last one cut at the fill | Your Frame demo trades appear with the right TF, P&L and win/loss |
-| **4. Trades and charts** | Trades list with filters; trade page with the 54-candle chart (Lightweight Charts), fill / SL / TP markers; "To qualify" screen with instant TF switch | Open a Frame trade and compare the chart with cTrader |
+| **4. Trades and charts** | Trades list per account (one tab each, PE 2026-11-02) with filters; trade page with the 54-candle chart (Lightweight Charts), fill / SL / TP markers; "To qualify" screen with instant TF switch | Open a Frame trade and compare the chart with cTrader |
 | **5. Analysis and coaching** | Self + coach forms (3 scores, total, comment), blind rule, lock, coach invitations and revocation, coach view | Score a trade as trader, invite a coach account, score it blind as coach |
 | **6. Dashboards** | Results, by technique / timeframe, score evolution, score vs result, self vs coach gap, review progress | Dashboard on your demo account |
 
@@ -78,6 +78,7 @@ Phase 2 ideas (trend replay with L1bre.Core, Discord/email notification, CSV exp
   - The first import starts at the account's registration date and reads one week per request (cTrader's limit), spaced by 250 ms (historical requests are limited to 5 per second).
   - Net P&L = gross + swap + commission + conversion fee, from the closing fills. Still to compare with your cTrader history: whether that commission covers both sides.
   - "Unlink" now keeps the imported trades (they will carry analyses); it erases the tokens and stops the imports.
+- Milestone 4 notes: Lightweight Charts 5.2.1 is shipped in `wwwroot/lib/lightweight-charts` with its licence and notice; its TradingView logo on the chart and the line under it are the attribution its licence asks for. A manual trade keeps its six timeframes even when qualified before its charts were built.
 - Milestone 2 decision: no `cTrader.OpenAPI.Net` (it targets .NET 6). The app has its own small client using the Open API's **JSON over WebSocket** (port 5036), which needs no protobuf code.
 
 ---
