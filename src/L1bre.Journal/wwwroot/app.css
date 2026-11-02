@@ -61,4 +61,14 @@ h1:focus {
 /* Trades list: the whole row opens the trade (Bootstrap's stretched-link needs a positioned row). */
 table.trades tbody tr { position: relative; }
 
-trade-chart { height: 460px; border: 1px solid var(--bs-border-color); border-radius: .375rem; }
+/* Trade page: the chart keeps the 12:19 portrait ratio of a phone screen (1200 x 1900 px), where trades are taken. */
+trade-chart { aspect-ratio: 12 / 19; width: 100%; border: 1px solid var(--bs-border-color); border-radius: .375rem; }
+.trade-layout { display: flex; flex-direction: column; gap: 1rem; }
+
+/* From tablet width up: data beside the chart, and the chart as tall as the window allows
+   (its width follows from the ratio; 13rem leaves room for the page title and timeframe buttons). */
+@media (min-width: 768px) {
+    .trade-layout { flex-direction: row; align-items: flex-start; }
+    .trade-chart-col { flex: 0 0 auto; width: max(300px, min(60%, calc((100vh - 13rem) * 12 / 19))); }
+    .trade-data-col { flex: 1 1 0; min-width: 0; }
+}
