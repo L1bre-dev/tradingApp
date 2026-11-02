@@ -115,6 +115,32 @@ public class QualificationTests
     }
 
     [Fact]
+    public void Manual_trade_qualified_before_its_charts_still_keeps_all_six_timeframes()
+    {
+        var q = new Qualification(TradeOrigin.Manual, "FTM", "H1");
+        Assert.True(q.IsQualified);
+        Assert.Equal(6, q.TimeframesToStore.Count);
+    }
+
+    [Theory]
+    [InlineData("Frame", "M15", null)]
+    [InlineData("FTM", "m15", null)]
+    [InlineData(null, "M15", "Pick a technique.")]
+    [InlineData("Scalp", "M15", "Pick a technique.")]
+    [InlineData("Frame", "", "Pick a timeframe.")]
+    [InlineData("Frame", "D1", "Pick a timeframe.")]
+    public void Trader_choice_needs_a_known_technique_and_timeframe(string? technique, string? timeframe, string? error)
+    {
+        Assert.Equal(error, Qualification.CheckChoice(technique, timeframe, ["M5", "M15", "H1"]));
+    }
+
+    [Fact]
+    public void Trader_choice_needs_the_timeframe_candles_to_be_stored()
+    {
+        Assert.Contains("not stored", Qualification.CheckChoice("Frame", "H4", ["M15"]));
+    }
+
+    [Fact]
     public void Label_and_comment_are_read_loosely()
     {
         Assert.Equal(new Qualification(TradeOrigin.Bot, "Frame", "H1"), Qualification.FromOrder(" frame ", "h1"));

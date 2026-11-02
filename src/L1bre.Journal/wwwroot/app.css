@@ -58,3 +58,7 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+/* Trades list: the whole row opens the trade (Bootstrap's stretched-link needs a positioned row). */
+table.trades tbody tr { position: relative; }
+
+trade-chart { height: 460px; border: 1px solid var(--bs-border-color); border-radius: .375rem; }

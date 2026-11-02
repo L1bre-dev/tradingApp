@@ -12,6 +12,7 @@ Runs at https://fta.trading. The cBots themselves live in the separate `L1bre-de
 
 ```
 src/L1bre.Journal/              Blazor Server web app (.NET 10), EF Core + PostgreSQL, ASP.NET Identity
+                                (wwwroot/js/trade-chart.js draws the trade charts with Lightweight Charts)
 src/L1bre.Journal.Domain/       plain C# rules, no web or database code (unit-tested): fills → trades, cut candle, qualification
 src/L1bre.Journal.CTrader/      the only code talking to cTrader Open API (OAuth + JSON over WebSocket)
 tests/L1bre.Journal.Domain.Tests/
