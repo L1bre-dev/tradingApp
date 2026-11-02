@@ -36,8 +36,8 @@
                 <style>
                     :host { display: block; position: relative; }
                     .chart { position: absolute; inset: 0; }
-                    .legend { position: absolute; top: 6px; left: 8px; z-index: 3; font: 12px system-ui, sans-serif;
-                              color: #333; background: rgba(255,255,255,.8); padding: 1px 4px; border-radius: 3px; pointer-events: none; }
+                    .legend { position: absolute; top: 6px; left: 8px; right: 80px; z-index: 3; font: 12px system-ui, sans-serif;
+                              color: #333; pointer-events: none; text-shadow: 0 0 3px #fff; }
                 </style>
                 <div class="chart"></div><div class="legend"></div>`;
             this.legend = root.querySelector('.legend');
@@ -103,7 +103,8 @@
                 price: this.data.entry,
                 shape: buy ? 'arrowUp' : 'arrowDown',
                 color: colors.entry,
-                text: `${this.data.direction} ${this.data.entry.toFixed(this.data.digits)}`,
+                // The price itself is on the entry line's label, at the right.
+                text: this.data.direction,
             }] : []);
             this.chart.timeScale().fitContent();
             this.showLegend(this.lastBar);
@@ -115,8 +116,11 @@
         showLegend(bar) {
             if (!bar || !this.legend) return;
             const d = this.data.digits;
-            const t = new Date(bar.time * 1000).toISOString().slice(0, 16).replace('T', ' ');
-            this.legend.textContent = `${this.timeframe} · ${t} UTC · O ${bar.open.toFixed(d)} H ${bar.high.toFixed(d)} L ${bar.low.toFixed(d)} C ${bar.close.toFixed(d)}`;
+            const t = new Date(bar.time * 1000).toISOString().slice(5, 16).replace('T', ' ');
+            // Narrow (portrait) chart: the candle on one line, its prices on the next.
+            this.legend.innerHTML = '';
+            this.legend.append(`${this.timeframe} · ${t} UTC`, document.createElement('br'),
+                `O ${bar.open.toFixed(d)} H ${bar.high.toFixed(d)} L ${bar.low.toFixed(d)} C ${bar.close.toFixed(d)}`);
         }
     }
 

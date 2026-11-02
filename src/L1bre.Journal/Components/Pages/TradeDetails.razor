@@ -43,6 +43,10 @@
     <div class="alert @messageClass" role="status">@message</div>
 }
 
+@* Chart on the left in portrait (12:19, like a phone screen, where trades are taken), data on the right;
+   on a phone the data goes below the chart. *@
+<div class="trade-layout">
+<div class="trade-chart-col">
 @if (view.Charts.Count == 0)
 {
     <div class="alert alert-secondary">
@@ -75,45 +79,10 @@ else
         Chart by <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView</a> Lightweight Charts™.
     </p>
 }
+</div>
 
-<div class="row g-3 mt-1">
-    <div class="col-lg-7">
-        <div class="card">
-            <div class="card-header">Trade</div>
-            <div class="card-body p-0">
-                <table class="table table-sm mb-0 small">
-                    <tbody>
-                        <tr><th class="ps-3">Account</th><td>@account.TraderLogin @(account.IsLive ? "Live" : "Demo") · @account.BrokerName</td></tr>
-                        <tr><th class="ps-3">Volume</th><td>@TradeFormat.Lots(trade) lot@(trade.Lots == 1 ? "" : "s")</td></tr>
-                        <tr><th class="ps-3">Entry</th><td>@TradeFormat.Price(trade, trade.EntryPrice) <span class="text-secondary">(@(trade.OrderType?.ToLowerInvariant() ?? "?") order)</span></td></tr>
-                        <tr><th class="ps-3">Stop loss</th><td>@Level(trade, trade.StopLoss)</td></tr>
-                        <tr><th class="ps-3">Take profit</th><td>@Level(trade, trade.TakeProfit)</td></tr>
-                        @if (RiskReward(trade) is { } rr)
-                        {
-                            <tr><th class="ps-3">Reward / risk</th><td>@rr.ToString("0.00", CultureInfo.InvariantCulture)</td></tr>
-                        }
-                        @if (trade.ClosedAt is { } closed)
-                        {
-                            <tr><th class="ps-3">Closed</th><td>@Time(closed, "yyyy-MM-dd HH:mm:ss") UTC at @TradeFormat.Price(trade, trade.ExitPrice)
-                                (@(trade.Pips?.ToString("0", CultureInfo.InvariantCulture)) pips)</td></tr>
-                            <tr><th class="ps-3">Gross</th><td>@Money(trade.GrossProfit)</td></tr>
-                            <tr><th class="ps-3">Swap · commission</th><td>@Money(trade.Swap) · @Money(trade.Commission)
-                                @if (trade.ConversionFee != 0) { <text> · conversion @Money(trade.ConversionFee)</text> }</td></tr>
-                            <tr><th class="ps-3">Net P&amp;L</th><td class="@(trade.NetProfit > 0 ? "text-success" : "text-danger") fw-semibold">@Money(trade.NetProfit)</td></tr>
-                        }
-                        else
-                        {
-                            <tr><th class="ps-3">Closed</th><td>still open@(trade.ClosedVolumeCents > 0 ? " (partly closed)" : "")</td></tr>
-                        }
-                        <tr><th class="ps-3">Order</th><td class="text-secondary">label @(trade.Label ?? "none") · comment @(trade.Comment ?? "none") · position @trade.PositionId</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-lg-5">
-        <div class="card @(trade.Status == TradeStatus.ToQualify ? "border-warning" : "")">
+<div class="trade-data-col">
+        <div class="card mb-3 @(trade.Status == TradeStatus.ToQualify ? "border-warning" : "")">
             <div class="card-header">@(trade.Status == TradeStatus.ToQualify ? "To qualify" : "Qualification")</div>
             <div class="card-body">
                 @if (trade.Status == TradeStatus.Qualified)
@@ -147,7 +116,39 @@ else
                 }
             </div>
         </div>
-    </div>
+        <div class="card mb-3">
+            <div class="card-header">Trade</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0 small">
+                    <tbody>
+                        <tr><th class="ps-3">Account</th><td>@account.TraderLogin @(account.IsLive ? "Live" : "Demo") · @account.BrokerName</td></tr>
+                        <tr><th class="ps-3">Volume</th><td>@TradeFormat.Lots(trade) lot@(trade.Lots == 1 ? "" : "s")</td></tr>
+                        <tr><th class="ps-3">Entry</th><td>@TradeFormat.Price(trade, trade.EntryPrice) <span class="text-secondary">(@(trade.OrderType?.ToLowerInvariant() ?? "?") order)</span></td></tr>
+                        <tr><th class="ps-3">Stop loss</th><td>@Level(trade, trade.StopLoss)</td></tr>
+                        <tr><th class="ps-3">Take profit</th><td>@Level(trade, trade.TakeProfit)</td></tr>
+                        @if (RiskReward(trade) is { } rr)
+                        {
+                            <tr><th class="ps-3">Reward / risk</th><td>@rr.ToString("0.00", CultureInfo.InvariantCulture)</td></tr>
+                        }
+                        @if (trade.ClosedAt is { } closed)
+                        {
+                            <tr><th class="ps-3">Closed</th><td>@Time(closed, "yyyy-MM-dd HH:mm:ss") UTC at @TradeFormat.Price(trade, trade.ExitPrice)
+                                (@(trade.Pips?.ToString("0", CultureInfo.InvariantCulture)) pips)</td></tr>
+                            <tr><th class="ps-3">Gross</th><td>@Money(trade.GrossProfit)</td></tr>
+                            <tr><th class="ps-3">Swap · commission</th><td>@Money(trade.Swap) · @Money(trade.Commission)
+                                @if (trade.ConversionFee != 0) { <text> · conversion @Money(trade.ConversionFee)</text> }</td></tr>
+                            <tr><th class="ps-3">Net P&amp;L</th><td class="@(trade.NetProfit > 0 ? "text-success" : "text-danger") fw-semibold">@Money(trade.NetProfit)</td></tr>
+                        }
+                        else
+                        {
+                            <tr><th class="ps-3">Closed</th><td>still open@(trade.ClosedVolumeCents > 0 ? " (partly closed)" : "")</td></tr>
+                        }
+                        <tr><th class="ps-3">Order</th><td class="text-secondary">label @(trade.Label ?? "none") · comment @(trade.Comment ?? "none") · position @trade.PositionId</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+</div>
 </div>
 
 @code {
